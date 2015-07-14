@@ -1,0 +1,16 @@
+[package]
+name = "server"
+version = "0.1.0"
+authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
+description = "Presence system server crate"
+
+# Crates.io
+# [dependencies]
+
+# Deps from git
+[dependencies.epoll]
+git = "https://github.com/nathansizemore/epoll"
+
+# Deps from crate
+[dependencies.util]
+path = "../util"

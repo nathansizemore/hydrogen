@@ -2,3 +2,18 @@
 name = "hydrogen"
 version = "0.1.0"
 authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
+description = "Presence system framework"
+repository = "https://github.com/nathansizemore/hydrogen"
+readme = "README.md"
+keywords = ["presence"]
+license = "MPL 2.0"
+
+# Inner project crates
+[dependencies.util]
+path = "./src/util"
+
+[dependencies.server]
+path = "./src/server"
+
+[dependencies.client]
+path = "./src/client"
