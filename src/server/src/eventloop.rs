@@ -17,6 +17,7 @@ use std::thread::JoinHandle;
 use std::net::TcpStream;
 use std::ops::DerefMut;
 use std::collections::LinkedList;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{
     channel,
@@ -24,6 +25,9 @@ use std::sync::mpsc::{
     Receiver,
     TryRecvError
 };
+
+use super::num_cpus;
+use super::socket::Socket;
 
 
 pub struct EventLoop {
@@ -37,12 +41,12 @@ pub struct EventLoop {
 impl EventLoop {
 
     /// Returns a new EventLoop
-    pub fn new() -> EventLoop {
+    pub fn new(server_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>) -> EventLoop {
         let (tx, rx): (Sender<TcpStream>, Receiver<TcpStream>) = channel();
         let prox = thread::Builder::new()
             .name("EventLoop".to_string())
             .spawn(move || {
-                EventLoop::start(rx);
+                EventLoop::start(rx, server_tx);
             }).unwrap();
 
         EventLoop {
@@ -57,8 +61,17 @@ impl EventLoop {
     }
 
     /// Main event loop
-    fn start(rx: Receiver<TcpStream>) {
+    fn start(rx: Receiver<TcpStream>, uspace_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>) {
         // Master socket list
-        let mut
+        let mut sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
+
+        // Master id list
+        let mut ids = Arc::new(Mutex::new(LinkedList::<u32>::new()));
+
+
+
+
+
+
     }
 }

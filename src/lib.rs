@@ -12,6 +12,5 @@
 // the Mozilla Public License, v. 2.0.
 
 
-extern crate util;
 extern crate server;
 extern crate client;

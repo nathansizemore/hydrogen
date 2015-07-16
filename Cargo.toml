@@ -9,11 +9,15 @@ keywords = ["presence"]
 license = "MPL 2.0"
 
 # Inner project crates
-[dependencies.util]
-path = "./src/util"
-
 [dependencies.server]
 path = "./src/server"
 
 [dependencies.client]
 path = "./src/client"
+
+# Crates.io
+
+
+# # Git related crates
+# [dependencies.repo]
+# git = ""
