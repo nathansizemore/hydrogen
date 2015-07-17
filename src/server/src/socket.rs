@@ -15,6 +15,8 @@
 //! Socket module
 
 
+use std::os::unix::io::RawFd;
+
 use super::rand;
 use super::simple_stream::{
     SimpleStream,
@@ -56,5 +58,10 @@ impl Socket {
     /// Attempts to write to this socket
     pub fn write(&mut self, buf: &Vec<u8>) -> WriteResult {
         self.write(buf)
+    }
+
+    /// Returns the underlying file descriptor
+    pub fn raw_fd(&self) -> RawFd {
+        self.stream.raw_fd()
     }
 }

@@ -111,9 +111,7 @@ impl Server {
         loop {
             match self.data_rx.recv() {
                 Ok((sockets, socket, buff)) => {
-                    // let fn_clone = self.execute.clone();
-                    // let execute = Box::new(fn_clone);
-                    // pool.run(execute);
+                    // TODO - Send to resource pool to execute
                 }
                 Err(e) => {
                     // TODO - Figure out a way to restart the event loop
