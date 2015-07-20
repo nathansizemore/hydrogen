@@ -15,7 +15,7 @@
 use std::thread;
 use std::thread::JoinHandle;
 use std::net::TcpStream;
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Deref};
 use std::os::unix::io::RawFd;
 use std::collections::LinkedList;
 use std::process::Command;
@@ -74,6 +74,8 @@ impl EventLoop {
         // TODO - Figure out if this is needed to ensure collisions aren't made?
         let mut ids = Arc::new(Mutex::new(LinkedList::<u32>::new()));
 
+        // Our error handler for this thread and it's children
+        let (err_tx, err_rx): (Sender<()>, Receiver<()>) = channel();
 
         // Create an epoll instance
         let result = epoll::create1(0);
@@ -88,8 +90,8 @@ impl EventLoop {
         let c_epoll_instance = epoll_instance.clone();
         let epoll_prox = thread::Builder::new()
             .name("EpollLoop".to_string())
-            .scoped(move || {
-                EventLoop::epoll_loop(uspace_tx, c_sockets, c_epoll_instance);
+            .spawn(move || {
+                EventLoop::epoll_loop(uspace_tx, c_sockets, c_epoll_instance, err_rx);
             }).unwrap();
 
         for new_stream in rx.iter() {
@@ -97,15 +99,20 @@ impl EventLoop {
                 Ok(s_stream) => {
                     // Add to master list
                     let mut socket = Socket::new(s_stream);
-                    let mut s_guard = match sockets.lock() {
-                        Ok(guard) => guard,
-                        Err(poisoned) => poisoned.into_inner()
-                    };
+
+                    // TODO - Replace with recoverable version once into_inner() is stable
+                    // Unfortunately, this is the only stable way to use mutexes at the moment
+                    // Hopefully recovering from poisoning will be in 1.2
+                    // let mut s_guard = match sockets.lock() {
+                    //     Ok(guard) => guard,
+                    //     Err(poisoned) => poisoned.into_inner()
+                    // };
+                    let mut s_guard = sockets.lock().unwrap();
                     let s_list = s_guard.deref_mut();
+                    let s_fd = socket.raw_fd();
                     s_list.push_back(socket);
 
                     // Add to epoll
-                    let s_fd = socket.raw_fd();
                     let event = Box::new(EpollEvent {
                         data: s_fd as u64,
                         events: (event_type::EPOLLIN | event_type::EPOLLET)
@@ -123,15 +130,88 @@ impl EventLoop {
         }
 
         // If we get here, shit is real bad. It means we have lost our
-        // channel to the outside world. Nothing else to do besides panic!
-        // Because the epoll loop is a scoped thread belonging to this scope,
-        // we can panic here and cause it to unwind also
-        panic!("Error - ")
+        // channel to the outside world.
+        // Kill off event loop, so unwinding can begin
+        err_tx.send(());
     }
 
-    fn epoll_loop(uspace_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>, sockets: Arc<Mutex<LinkedList<Socket>>>, epoll_instace: RawFd) {
-        loop {
+    ///
+    fn epoll_loop(uspace_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>,
+                  sockets: Arc<Mutex<LinkedList<Socket>>>,
+                  epoll_instance: RawFd,
+                  err_rx: Receiver<()>) {
 
+        // This is the maximum number of events we want to be notified of at one time
+        let mut events = Vec::<EpollEvent>::with_capacity(100);
+
+        loop {
+            // Wait for epoll events
+            match epoll::wait(epoll_instance, &mut events[..], -1) {
+                Ok(num_events) => {
+                    for x in 0..num_events {
+                        let tx_clone = uspace_tx.clone();
+                        let s_clone = sockets.clone();
+                        EventLoop::handle_epoll_event(tx_clone, &events[x as usize], s_clone);
+                    }
+                }
+                Err(e) => {
+                    panic!("Error on epoll::wait(): {}", e)
+                }
+            }
+
+            // If we receive anything on this end or lose communication, we need to halt,
+            // because we have no where to send up events, our "user space" channel is
+            // gone
+            match err_rx.try_recv() {
+                Ok(_) => {
+                    println!("Error, terminating epoll_loop");
+                    break;
+                }
+                Err(e) => {
+                    match e {
+                        TryRecvError::Empty => {}
+                        _ => {
+                            println!("Error, terminating epoll_loo");
+                            break;
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    ///
+    fn handle_epoll_event(uspace_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>,
+                          event: &EpollEvent,
+                          sockets: Arc<Mutex<LinkedList<Socket>>>) {
+
+        let fd = event.data;
+        // TODO - Replace with recoverable version once into_inner() is stable
+        // Unfortunately, this is the only stable way to use mutexes at the moment
+        // Hopefully recovering from poisoning will be in 1.2
+        // let mut s_guard = match sockets.lock() {
+        //     Ok(guard) => guard,
+        //     Err(poisoned) => poisoned.into_inner()
+        // };
+        let mut s_guard = sockets.lock().unwrap();
+        let s_list = s_guard.deref_mut();
+
+        for socket in s_list.iter_mut() {
+            if socket.raw_fd() as u64 == fd {
+                // We've found the socket for the event passed from epoll
+                // Lets attempt to read from it
+                match socket.read() {
+                    Ok(()) => {
+                        for msg in socket.buffer().iter() {
+
+                        }
+                    }
+                    Err(e) => {
+                        // TODO - Figure out how to handle
+                    }
+                }
+            }
+        }
+
     }
 }

@@ -64,4 +64,11 @@ impl Socket {
     pub fn raw_fd(&self) -> RawFd {
         self.stream.raw_fd()
     }
+
+    /// Returns a Vec<Vec<u8>> representing the payloads that were read during the last
+    /// call to read().
+    /// This calls drains the internal buffer
+    pub fn buffer(&mut self) -> Vec<Vec<u8>> {
+        self.stream.buffer_as_mut().drain_queue()
+    }
 }
