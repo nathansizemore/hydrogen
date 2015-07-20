@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::ops::DerefMut;
 use std::collections::LinkedList;
 
+use super::FpWrapper;
 use super::types::*;
 use super::socket::Socket;
 use super::num_cpus;
@@ -65,7 +66,7 @@ impl ResourcePool {
 
     /// Runs the passed function
     pub fn run(&mut self,
-        execute: EventFunctionPtr,
+        fp_wrapper: Arc<FpWrapper>,
         sockets: SocketList,
         socket: Socket,
         buffer: Vec<u8>)
@@ -75,7 +76,7 @@ impl ResourcePool {
         }
 
         self.w_threads[self.next_worker].sender().send((
-            execute, sockets, socket, buffer
+            fp_wrapper, sockets, socket, buffer
         ));
         self.next_worker += 1;
     }

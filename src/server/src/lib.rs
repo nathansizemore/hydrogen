@@ -43,6 +43,23 @@ mod resources;
 mod workerthread;
 
 
+pub struct FpWrapper {
+    fp: EventFunctionPtr
+}
+
+impl FpWrapper {
+    pub fn new(fp: EventFunctionPtr) -> FpWrapper {
+        FpWrapper {
+            fp: fp
+        }
+    }
+
+    pub fn run(&self, sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
+        (*self.fp)(sockets, socket, buffer)
+    }
+}
+
+
 pub struct Server {
     /// Epoll event loop
     eloop_prox: EventLoop,
@@ -51,9 +68,8 @@ pub struct Server {
     /// On data receiver from event loop
     data_rx: Receiver<EventTuple>,
     /// Called when data is received from event loop
-    execute: EventFunctionPtr
+    fp_wrapper: Arc<FpWrapper>
 }
-
 
 impl Server {
 
@@ -82,7 +98,7 @@ impl Server {
             conn_prox: listener,
             eloop_prox: eloop,
             data_rx: rx,
-            execute: Box::new(Server::default_execute)
+            fp_wrapper: Arc::new(FpWrapper::new(Box::new(Server::default_execute)))
         }
     }
 
@@ -100,7 +116,7 @@ impl Server {
 
     /// Registers the function to execute when data is received
     pub fn on_data_received(&mut self, execute: EventFunctionPtr) {
-        self.execute = execute;
+        self.fp_wrapper = Arc::new(FpWrapper::new(execute));
     }
 
     /// Starts the server listening to the event loop
@@ -109,8 +125,8 @@ impl Server {
         loop {
             match self.data_rx.recv() {
                 Ok((sockets, socket, buff)) => {
-                    // let fn_to_execute = self.execute.clone();
-                    // r_pool.run(fn_to_execute, sockets, socket, buff);
+                    let fp_wrapper = self.fp_wrapper.clone();
+                    r_pool.run(fp_wrapper, sockets, socket, buff);
                 }
                 Err(e) => {
                     // TODO - Figure out a way to restart the event loop
