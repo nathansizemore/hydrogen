@@ -69,6 +69,8 @@ impl Socket {
     /// call to read().
     /// This calls drains the internal buffer
     pub fn buffer(&mut self) -> Vec<Vec<u8>> {
-        self.stream.buffer_as_mut().drain_queue()
+        let internal_buffer = self.stream.buffer_as_mut();
+        let queue = internal_buffer.drain_queue();
+        queue
     }
 }
