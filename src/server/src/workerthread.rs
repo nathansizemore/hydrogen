@@ -24,6 +24,7 @@ use std::sync::mpsc::{
     TryRecvError
 };
 
+use super::types::*;
 use super::socket::Socket;
 
 
@@ -31,7 +32,7 @@ pub struct WorkerThread {
     /// Handle to this process
     prox: JoinHandle<()>,
     /// Sender to this threads receiver
-    prox_tx: Sender<(Box<Fn(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)+Send>, Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>
+    prox_tx: Sender<(EventFunctionPtr, SocketList, Socket, Vec<u8>)>
 }
 
 
@@ -40,10 +41,8 @@ impl WorkerThread {
     /// Creates a new worker thread
     pub fn new() -> WorkerThread {
         let (tx, rx): (
-            Sender<
-                (Box<Fn(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)+Send>, Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>,
-            Receiver<
-                (Box<Fn(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)+Send>, Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>)
+            Sender<(EventFunctionPtr, SocketList, Socket, Vec<u8>)>,
+            Receiver<(EventFunctionPtr, SocketList, Socket, Vec<u8>)>)
             = channel();
 
         let prox = thread::Builder::new()
@@ -59,12 +58,12 @@ impl WorkerThread {
     }
 
     /// Returns a clone of this thread's Sender<T>
-    pub fn sender(&self) -> Sender<(Box<Fn(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)+Send>, Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)> {
+    pub fn sender(&self) -> Sender<(EventFunctionPtr, SocketList, Socket, Vec<u8>)> {
         self.prox_tx.clone()
     }
 
     /// Starts the worker thread
-    fn start(rx: Receiver<(Box<Fn(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)+Send>, Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>) {
+    fn start(rx: Receiver<(EventFunctionPtr, SocketList, Socket, Vec<u8>)>) {
         for (task, sockets, socket, buffer) in rx.iter() {
             // Do all the stuff
         }

@@ -31,10 +31,12 @@ use std::sync::mpsc::{
     RecvError
 };
 
+use types::*;
 use socket::Socket;
 use eventloop::EventLoop;
 use resources::ResourcePool;
 
+mod types;
 mod eventloop;
 mod socket;
 mod resources;
@@ -47,9 +49,9 @@ pub struct Server {
     /// Incoming connection listener
     conn_prox: JoinHandle<()>,
     /// On data receiver from event loop
-    data_rx: Receiver<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>,
+    data_rx: Receiver<EventTuple>,
     /// Called when data is received from event loop
-    execute: Box<Fn(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>
+    execute: EventFunctionPtr
 }
 
 
@@ -61,7 +63,7 @@ impl Server {
 
         // Communication channel for the event loop to bubble
         // up messages to the server receiver
-        let (tx, rx): (Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>, Receiver<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>) = channel();
+        let (tx, rx): (Sender<EventTuple>, Receiver<EventTuple>) = channel();
 
         // Create the event loop
         let eloop = EventLoop::new(tx);
@@ -97,21 +99,18 @@ impl Server {
     }
 
     /// Registers the function to execute when data is received
-    pub fn on_data_received(&mut self,
-        execute: Box<Fn(Arc<Mutex<LinkedList<Socket>>>,
-                    Socket,
-                    Vec<u8>)>)
-    {
+    pub fn on_data_received(&mut self, execute: EventFunctionPtr) {
         self.execute = execute;
     }
 
     /// Starts the server listening to the event loop
     pub fn begin(&mut self) {
-        let pool = ResourcePool::new();
+        let mut r_pool = ResourcePool::new();
         loop {
             match self.data_rx.recv() {
                 Ok((sockets, socket, buff)) => {
-                    // TODO - Send to resource pool to execute
+                    // let fn_to_execute = self.execute.clone();
+                    // r_pool.run(fn_to_execute, sockets, socket, buff);
                 }
                 Err(e) => {
                     // TODO - Figure out a way to restart the event loop
@@ -121,7 +120,7 @@ impl Server {
     }
 
     /// Default execute function
-    fn default_execute(sockets: Arc<Mutex<LinkedList<Socket>>>, socket: Socket, buffer: Vec<u8>) {
+    fn default_execute(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
         println!("Default function executed")
     }
 }

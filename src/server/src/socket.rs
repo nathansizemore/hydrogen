@@ -57,7 +57,7 @@ impl Socket {
 
     /// Attempts to write to this socket
     pub fn write(&mut self, buf: &Vec<u8>) -> WriteResult {
-        self.write(buf)
+        self.stream.write(buf)
     }
 
     /// Returns the underlying file descriptor

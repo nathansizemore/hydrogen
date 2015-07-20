@@ -27,6 +27,7 @@ use std::sync::mpsc::{
     TryRecvError
 };
 
+use super::types::*;
 use super::epoll;
 use super::epoll::util::*;
 use super::epoll::EpollEvent;
@@ -46,7 +47,7 @@ pub struct EventLoop {
 impl EventLoop {
 
     /// Returns a new EventLoop
-    pub fn new(server_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>) -> EventLoop {
+    pub fn new(server_tx: Sender<EventTuple>) -> EventLoop {
         let (tx, rx): (Sender<TcpStream>, Receiver<TcpStream>) = channel();
         let prox = thread::Builder::new()
             .name("EventLoop".to_string())
@@ -66,7 +67,7 @@ impl EventLoop {
     }
 
     /// Main event loop
-    fn start(rx: Receiver<TcpStream>, uspace_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>) {
+    fn start(rx: Receiver<TcpStream>, uspace_tx: Sender<EventTuple>) {
         // Master socket list
         let mut sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
 
@@ -136,8 +137,8 @@ impl EventLoop {
     }
 
     ///
-    fn epoll_loop(uspace_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>,
-                  sockets: Arc<Mutex<LinkedList<Socket>>>,
+    fn epoll_loop(uspace_tx: Sender<EventTuple>,
+                  sockets: SocketList,
                   epoll_instance: RawFd,
                   err_rx: Receiver<()>) {
 
@@ -180,12 +181,28 @@ impl EventLoop {
         }
     }
 
+    /// Processes a read on the socket that is ready for reading
     ///
-    fn handle_epoll_event(uspace_tx: Sender<(Arc<Mutex<LinkedList<Socket>>>, Socket, Vec<u8>)>,
+    /// An epoll event is passed to this function, with the fd that is ready to be read
+    /// A traversal through the list of sockets is then performed in order to locate the
+    /// SimpleStream instance that is wrapping that file descriptor.
+    /// After a read is performed on that socket, it's data will be passed back to the
+    /// "user-space" section of the Server to process the payload however it needs to.
+    ///
+    /// TODO - Create a faster way to gain a safe reference to the SimpleStream wrapping
+    /// the fd instead of an O(n) lookup for every event. Currently lookup time is
+    /// O(n) * MAX_EPOLL_EVENTS, where MAX_EPOLL_EVENTS is user defined in this function's
+    /// caller.
+    fn handle_epoll_event(uspace_tx: Sender<EventTuple>,
                           event: &EpollEvent,
-                          sockets: Arc<Mutex<LinkedList<Socket>>>) {
+                          sockets: SocketList) {
 
+        // The fd we are traversing the list for
         let fd = event.data;
+
+        // We need a handle before the list gets locked and used
+        let s_list_clone = sockets.clone();
+
         // TODO - Replace with recoverable version once into_inner() is stable
         // Unfortunately, this is the only stable way to use mutexes at the moment
         // Hopefully recovering from poisoning will be in 1.2
@@ -195,7 +212,6 @@ impl EventLoop {
         // };
         let mut s_guard = sockets.lock().unwrap();
         let s_list = s_guard.deref_mut();
-
         for socket in s_list.iter_mut() {
             if socket.raw_fd() as u64 == fd {
                 // We've found the socket for the event passed from epoll
@@ -203,7 +219,10 @@ impl EventLoop {
                 match socket.read() {
                     Ok(()) => {
                         for msg in socket.buffer().iter() {
-
+                            let list_handle = s_list_clone.clone();
+                            let socket_clone = socket.clone();
+                            let msg_clone = msg.clone();
+                            uspace_tx.send((list_handle, socket_clone, msg_clone));
                         }
                     }
                     Err(e) => {
@@ -212,6 +231,5 @@ impl EventLoop {
                 }
             }
         }
-
     }
 }
