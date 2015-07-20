@@ -36,9 +36,10 @@ use self::socket::Socket;
 use self::eventloop::EventLoop;
 use self::resources::ResourcePool;
 
-mod types;
+pub mod types;
+pub mod socket;
+
 mod eventloop;
-mod socket;
 mod resources;
 mod workerthread;
 

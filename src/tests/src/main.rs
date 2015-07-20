@@ -14,12 +14,13 @@
 
 extern crate hydrogen;
 
-use hydrogen::server;
+use hydrogen::server::Server;
 use hydrogen::server::types::*;
+use hydrogen::server::socket::Socket;
 
 fn main() {
     let mut server = Server::new("0.0.0.0:1337");
-    server.on_data_recveived(on_data_recveived);
+    server.on_data_received(Box::new(on_data_received));
     server.begin();
 }
 
