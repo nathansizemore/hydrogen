@@ -1,5 +1,10 @@
 [package]
-name = "client"
+name = "tests"
 version = "0.1.0"
 authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
-description = "Presence system client crate"
+
+
+
+
+[dependencies.hydrogen]
+path = "../../"

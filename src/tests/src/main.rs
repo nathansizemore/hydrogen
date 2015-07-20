@@ -12,5 +12,17 @@
 // the Mozilla Public License, v. 2.0.
 
 
-pub mod client;
-pub mod server;
+extern crate hydrogen;
+
+use hydrogen::server;
+use hydrogen::server::types::*;
+
+fn main() {
+    let mut server = Server::new("0.0.0.0:1337");
+    server.on_data_recveived(on_data_recveived);
+    server.begin();
+}
+
+pub fn on_data_received(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
+    println!("on_data_received hit")
+}
