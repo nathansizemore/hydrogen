@@ -31,10 +31,10 @@ use std::sync::mpsc::{
     RecvError
 };
 
-use types::*;
-use socket::Socket;
-use eventloop::EventLoop;
-use resources::ResourcePool;
+use self::types::*;
+use self::socket::Socket;
+use self::eventloop::EventLoop;
+use self::resources::ResourcePool;
 
 mod types;
 mod eventloop;

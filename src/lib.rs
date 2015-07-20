@@ -12,5 +12,10 @@
 // the Mozilla Public License, v. 2.0.
 
 
+extern crate rand;
+extern crate epoll;
+extern crate simple_stream;
+extern crate num_cpus;
+
 pub mod client;
 pub mod server;

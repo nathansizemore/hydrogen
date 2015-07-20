@@ -8,16 +8,14 @@ readme = "README.md"
 keywords = ["presence"]
 license = "MPL 2.0"
 
-# Inner project crates
-[dependencies.server]
-path = "./src/server"
+# From crates.io
+[dependencies]
+rand = "*"
+num_cpus = "*"
 
-[dependencies.client]
-path = "./src/client"
+# From git
+[dependencies.epoll]
+git = "https://github.com/nathansizemore/epoll"
 
-# Crates.io
-
-
-# # Git related crates
-# [dependencies.repo]
-# git = ""
+[dependencies.simple-stream]
+git = "https://github.com/nathansizemore/simple-stream"
