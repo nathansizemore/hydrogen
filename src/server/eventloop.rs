@@ -86,8 +86,6 @@ impl EventLoop {
         }
         let epoll_instance = result.unwrap();
 
-        println!("efd: {}", epoll_instance);
-
         // Start the epoll thread
         let c_sockets = sockets.clone();
         let c_epoll_instance = epoll_instance.clone();
@@ -147,8 +145,6 @@ impl EventLoop {
         // This is the maximum number of events we want to be notified of at one time
         let mut events = Vec::<EpollEvent>::with_capacity(100);
         unsafe { events.set_len(100); }
-
-        println!("epd: {}", epoll_instance);
 
         loop {
             // Wait for epoll events
