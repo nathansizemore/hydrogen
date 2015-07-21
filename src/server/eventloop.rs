@@ -86,6 +86,8 @@ impl EventLoop {
         }
         let epoll_instance = result.unwrap();
 
+        println!("efd: {}", epoll_instance);
+
         // Start the epoll thread
         let c_sockets = sockets.clone();
         let c_epoll_instance = epoll_instance.clone();
