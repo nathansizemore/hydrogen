@@ -18,8 +18,8 @@
 use std::os::unix::io::RawFd;
 
 use super::rand;
-use super::simple_stream::{
-    SimpleStream,
+use super::simple_stream::nbetstream::{
+    NbetStream,
     ReadResult,
     WriteResult
 };
@@ -32,14 +32,14 @@ pub struct Socket {
     /// Unique identifier
     id: u32,
     /// I/O stream
-    stream: SimpleStream
+    stream: NbetStream
 }
 
 
 impl Socket {
 
     /// Returns a new Socket
-    pub fn new(stream: SimpleStream) -> Socket {
+    pub fn new(stream: NbetStream) -> Socket {
         Socket {
             id: rand::random::<u32>(),
             stream: stream

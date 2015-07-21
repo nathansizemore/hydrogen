@@ -33,7 +33,7 @@ use super::epoll::util::*;
 use super::epoll::EpollEvent;
 use super::num_cpus;
 use super::socket::Socket;
-use super::simple_stream::SimpleStream;
+use super::simple_stream::nbetstream::NbetStream;
 
 
 pub struct EventLoop {
@@ -96,7 +96,7 @@ impl EventLoop {
             }).unwrap();
 
         for new_stream in rx.iter() {
-            match SimpleStream::new(new_stream) {
+            match NbetStream::new(new_stream) {
                 Ok(s_stream) => {
                     // Add to master list
                     let mut socket = Socket::new(s_stream);
@@ -186,11 +186,11 @@ impl EventLoop {
     ///
     /// An epoll event is passed to this function, with the fd that is ready to be read
     /// A traversal through the list of sockets is then performed in order to locate the
-    /// SimpleStream instance that is wrapping that file descriptor.
+    /// NbetStream instance that is wrapping that file descriptor.
     /// After a read is performed on that socket, it's data will be passed back to the
     /// "user-space" section of the Server to process the payload however it needs to.
     ///
-    /// TODO - Create a faster way to gain a safe reference to the SimpleStream wrapping
+    /// TODO - Create a faster way to gain a safe reference to the NbetStream wrapping
     /// the fd instead of an O(n) lookup for every event. Currently lookup time is
     /// O(n) * MAX_EPOLL_EVENTS, where MAX_EPOLL_EVENTS is user defined in this function's
     /// caller.
