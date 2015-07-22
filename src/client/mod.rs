@@ -13,7 +13,7 @@
 
 
 use std::str;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::thread;
 use std::thread::JoinHandle;
 use std::net::{TcpListener, TcpStream};
@@ -26,10 +26,18 @@ use std::sync::mpsc::{
 
 use super::libc;
 use super::libc::{size_t, c_void, c_int, ssize_t, c_char};
+use super::simple_stream::bstream::Bstream;
+
+
+extern "C" {
+    fn register_writer_tx(tx: *mut Sender<Vec<u8>>);
+    fn register_stop_tx(tx: *mut Sender<()>);
+}
+
 
 
 /// Connects to the provided address, (eg "123.123.123.123:3000")
-pub extern fn connect(address: *const c_char) {
+pub extern "C" fn connect(address: *const c_char) -> c_int {
     let mut r_address;
     unsafe {
         r_address = CStr::from_ptr(address);
@@ -37,7 +45,59 @@ pub extern fn connect(address: *const c_char) {
     let s_address = r_address.to_bytes();
     let own_address = match str::from_utf8(s_address) {
         Ok(safe_str) => safe_str,
-        Err(e) => panic!("Invalid host address")
+        Err(e) => {
+            println!("Invalid host address");
+            return -1 as c_int;
+        }
     };
 
+    // Create and register a way to kill this client
+    let (kill_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    let mut k_tx_ptr = Box::new(kill_tx);
+    unsafe {
+        register_stop_tx(&mut *k_tx_ptr);
+    }
+
+    // Writer thread's channel
+    let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    let mut w_tx_ptr = Box::new(w_tx);
+    unsafe {
+        register_writer_tx(&mut *w_tx_ptr);
+    }
+
+
+
+
+
+    0 as c_int
+}
+
+/// Writes the complete contents of buffer to the server
+/// Returns -1 on error
+pub extern "C" fn write(w_tx: *mut c_void, buffer: *const c_char) -> c_int {
+    unimplemented!()
+}
+
+// Forever listens to incoming data and when a complete message is received,
+// the passed callback is hit
+fn reader_thread(client: &mut Bstream, event_handler: extern fn(*const c_char)) {
+    loop {
+        match client.read() {
+            Ok(buffer) => {
+                // Launch the handler in a new thread
+                thread::Builder::new()
+                    .name("Reader-Worker".to_string())
+                    .spawn(move||{
+                        let slice = &buffer[..];
+                        let c_buffer = CString::new(slice).unwrap();
+                        event_handler(c_buffer.as_ptr());
+                    }).unwrap();
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                break;
+            }
+        };
+    }
+    println!("Reader thread finished");
 }
