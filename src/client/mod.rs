@@ -37,13 +37,13 @@ extern "C" {
 
 
 /// Connects to the provided address, (eg "123.123.123.123:3000")
-pub extern "C" fn connect(address: *const c_char) -> c_int {
+pub extern "C" fn connect(address: *const c_char, handler: extern fn(*const c_char)) -> c_int {
     let mut r_address;
     unsafe {
         r_address = CStr::from_ptr(address);
     }
     let s_address = r_address.to_bytes();
-    let own_address = match str::from_utf8(s_address) {
+    let host_address = match str::from_utf8(s_address) {
         Ok(safe_str) => safe_str,
         Err(e) => {
             println!("Invalid host address");
@@ -65,24 +65,56 @@ pub extern "C" fn connect(address: *const c_char) -> c_int {
         register_writer_tx(&mut *w_tx_ptr);
     }
 
+    let result = TcpStream::connect(host_address);
+    if result.is_err() {
+        println!("Error connecting to {} - {}", host_address, result.unwrap_err());
+        return -1 as c_int;
+    }
 
+    let stream = result.unwrap();
+    let client = Bstream::new(stream);
+    let r_client = client.clone();
+    let w_client = client.clone();
 
+    // Start the reader thread
+    thread::Builder::new()
+        .name("ReaderThread".to_string())
+        .spawn(move||{
+            reader_thread(r_client, handler)
+        }).unwrap();
 
+    // Start the writer thread
+    thread::Builder::new()
+        .name("WriterThread".to_string())
+        .spawn(move||{
+            writer_thread(w_rx, w_client)
+        }).unwrap();
 
+    // Wait for the kill signal
+    match kill_rx.recv() {
+        Ok(_) => { }
+        Err(e) => {
+            println!("Error on kill channel: {}", e);
+            return -1 as c_int;
+        }
+    };
+
+    // Exit out in standard C fashion
     0 as c_int
 }
 
 /// Writes the complete contents of buffer to the server
 /// Returns -1 on error
-pub extern "C" fn write(w_tx: *mut c_void, buffer: *const c_char) -> c_int {
+pub extern "C" fn send_to_writer(w_tx: *mut c_void, buffer: *const c_char) -> c_int {
     unimplemented!()
 }
 
-// Forever listens to incoming data and when a complete message is received,
-// the passed callback is hit
-fn reader_thread(client: &mut Bstream, event_handler: extern fn(*const c_char)) {
+/// Forever listens to incoming data and when a complete message is received,
+/// the passed callback is hit
+fn reader_thread(client: Bstream, event_handler: extern fn(*const c_char)) {
+    let mut reader = client.clone();
     loop {
-        match client.read() {
+        match reader.read() {
             Ok(buffer) => {
                 // Launch the handler in a new thread
                 thread::Builder::new()
@@ -100,4 +132,28 @@ fn reader_thread(client: &mut Bstream, event_handler: extern fn(*const c_char)) 
         };
     }
     println!("Reader thread finished");
+}
+
+/// Forever listens to Receiver<Vec<u8>> waiting on messages to come in
+/// Once available, blocks until the entire message has been written
+fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream) {
+    let mut writer = client.clone();
+    loop {
+        match rx.recv() {
+            Ok(ref mut buffer) => {
+                match writer.write(buffer) {
+                    Ok(_) => { }
+                    Err(e) => {
+                        println!("Error: {}", e);
+                        break;
+                    }
+                };
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                break;
+            }
+        };
+    }
+    println!("Writer thread finished");
 }

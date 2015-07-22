@@ -16,6 +16,13 @@
 #include <stdlib.h>
 
 
+// Because of the lack of a .h file with Rust code, we are declaring
+// the extern functions in Rust land that we expect to be able to use
+// once the linking phase begins
+int connect(const char *address, void (*handler)(const char *));
+int send_to_writer(void *w_tx, const char *buffer);
+
+
 // Writer Sender<T> given to us from Rust
 void *write_tx;
 
@@ -23,13 +30,27 @@ void *write_tx;
 void *stop_tx;
 
 //
+
+// Registers the address of Rust's Sender<T> used to signal the write
+// thread there is a message to send
 void register_writer_tx(void *tx)
 {
     write_tx = *tx;
 }
 
-//
+// Registers the address of Rust's Sender<T> used to signal the lib
+// to disconnect and exit
 void register_stop_tx(void *tx)
 {
     stop_tx = *tx;
+}
+
+// Calls Rust
+void write(const char *buffer)
+{
+    int result = send_to_writer(write_tx, buffer);
+    if (result == -1)
+    {
+        // TODO - Determine if stdout msgs should report here or in Rust
+    }
 }
