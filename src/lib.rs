@@ -12,11 +12,19 @@
 // the Mozilla Public License, v. 2.0.
 
 
-extern crate libc;
-extern crate rand;
-extern crate epoll;
-extern crate simple_stream;
-extern crate num_cpus;
 
+#[cfg(any(target_os="macos", target_os="linux"))]
+extern crate libc;
+#[cfg(any(target_os="macos", target_os="linux"))]
+extern crate rand;
+#[cfg(any(target_os="macos", target_os="linux"))]
+extern crate simple_stream;
+#[cfg(any(target_os="macos", target_os="linux"))]
+extern crate num_cpus;
+#[cfg(target_os = "linux")]
+extern crate epoll;
+
+#[cfg(any(target_os="macos", target_os="linux"))]
 pub mod client;
+#[cfg(target_os = "linux")]
 pub mod server;

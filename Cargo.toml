@@ -7,6 +7,12 @@ repository = "https://github.com/nathansizemore/hydrogen"
 readme = "README.md"
 keywords = ["presence"]
 license = "MPL 2.0"
+build = "build.rs"
+# links = ""
+
+[lib]
+name = "hydrogen"
+crate_type = ["dylib"]
 
 # From crates.io
 [dependencies]
