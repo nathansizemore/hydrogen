@@ -31,7 +31,7 @@ extern "C" {
 /// Connects to the provided address, (eg "123.123.123.123:3000") and registers
 /// the on data received handler
 pub extern "C" fn connect(address: *const c_char,
-    handler: extern fn(*const c_char),
+    handler: extern fn(*const c_char, c_int),
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
@@ -144,7 +144,7 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
 /// Forever listens to incoming data and when a complete message is received,
 /// the passed callback is hit
 fn reader_thread(client: Bstream,
-                 event_handler: extern fn(*const c_char),
+                 event_handler: extern fn(*const c_char, c_int),
                  kill_tx: Sender<()>) {
 
     let mut reader = client.clone();
@@ -157,7 +157,7 @@ fn reader_thread(client: Bstream,
                     .spawn(move||{
                         let slice = &buffer[..];
                         let c_buffer = CString::new(slice).unwrap();
-                        event_handler(c_buffer.as_ptr());
+                        event_handler(c_buffer.as_ptr(), buffer.len() as c_int);
                     }).unwrap();
             }
             Err(e) => {
