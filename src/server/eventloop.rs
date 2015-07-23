@@ -15,10 +15,9 @@
 use std::thread;
 use std::thread::JoinHandle;
 use std::net::TcpStream;
-use std::ops::{DerefMut, Deref};
+use std::ops::DerefMut;
 use std::os::unix::io::RawFd;
 use std::collections::LinkedList;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{
     channel,
@@ -31,11 +30,10 @@ use super::types::*;
 use super::epoll;
 use super::epoll::util::*;
 use super::epoll::EpollEvent;
-use super::num_cpus;
 use super::socket::Socket;
 use super::simple_stream::nbetstream::NbetStream;
 
-
+#[allow(dead_code)]
 pub struct EventLoop {
     /// Handle to event loop process
     prox: JoinHandle<()>,
@@ -69,11 +67,7 @@ impl EventLoop {
     /// Main event loop
     fn start(rx: Receiver<TcpStream>, uspace_tx: Sender<EventTuple>) {
         // Master socket list
-        let mut sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
-
-        // Master id list
-        // TODO - Figure out if this is needed to ensure collisions aren't made?
-        let mut ids = Arc::new(Mutex::new(LinkedList::<u32>::new()));
+        let sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
 
         // Our error handler for this thread and it's children
         let (err_tx, err_rx): (Sender<()>, Receiver<()>) = channel();
@@ -99,7 +93,7 @@ impl EventLoop {
             match NbetStream::new(new_stream) {
                 Ok(s_stream) => {
                     // Add to master list
-                    let mut socket = Socket::new(s_stream);
+                    let socket = Socket::new(s_stream);
 
                     // TODO - Replace with recoverable version once into_inner() is stable
                     // Unfortunately, this is the only stable way to use mutexes at the moment
@@ -133,7 +127,7 @@ impl EventLoop {
         // If we get here, shit is real bad. It means we have lost our
         // channel to the outside world.
         // Kill off event loop, so unwinding can begin
-        err_tx.send(());
+        let _ = err_tx.send(());
     }
 
     ///
@@ -223,10 +217,10 @@ impl EventLoop {
                             let list_handle = s_list_clone.clone();
                             let socket_clone = socket.clone();
                             let msg_clone = msg.clone();
-                            uspace_tx.send((list_handle, socket_clone, msg_clone));
+                            let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
                         }
                     }
-                    Err(e) => {
+                    Err(_) => {
                         // TODO - Figure out how to handle
                     }
                 }

@@ -14,21 +14,14 @@
 
 use std::thread;
 use std::thread::JoinHandle;
-use std::sync::{Arc, Mutex};
-use std::ops::DerefMut;
-use std::collections::LinkedList;
-use std::sync::mpsc::{
-    channel,
-    Sender,
-    Receiver,
-    TryRecvError
-};
+use std::sync::Arc;
+use std::sync::mpsc::{channel, Sender, Receiver};
 
 use super::types::*;
 use super::FpWrapper;
 use super::socket::Socket;
 
-
+#[allow(dead_code)]
 pub struct WorkerThread {
     /// Handle to this process
     prox: JoinHandle<()>,

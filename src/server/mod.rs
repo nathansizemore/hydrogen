@@ -20,16 +20,9 @@ extern crate num_cpus;
 
 use std::thread;
 use std::thread::JoinHandle;
-use std::sync::{Arc, Mutex};
-use std::ops::DerefMut;
-use std::collections::LinkedList;
+use std::sync::Arc;
 use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc::{
-    channel,
-    Sender,
-    Receiver,
-    RecvError
-};
+use std::sync::mpsc::{channel, Sender, Receiver};
 
 use self::types::*;
 use self::socket::Socket;
@@ -61,6 +54,7 @@ impl FpWrapper {
 }
 
 
+#[allow(dead_code)]
 pub struct Server {
     /// Epoll event loop
     eloop_prox: EventLoop,
@@ -108,7 +102,7 @@ impl Server {
         let listener = TcpListener::bind(&address[..]).unwrap();
         for stream in listener.incoming() {
             match stream {
-                Ok(stream) => { eloop_tx.send(stream); }
+                Ok(stream) => { let _ = eloop_tx.send(stream); }
                 Err(_) => { }
             }
         }
@@ -129,7 +123,7 @@ impl Server {
                     let fp_wrapper = self.fp_wrapper.clone();
                     r_pool.run(fp_wrapper, sockets, socket, buff);
                 }
-                Err(e) => {
+                Err(_) => {
                     // TODO - Figure out a way to restart the event loop
                 }
             }
@@ -137,6 +131,7 @@ impl Server {
     }
 
     /// Default execute function
+    #[allow(unused_variables)]
     fn default_execute(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
         println!("Default function executed")
     }

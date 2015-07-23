@@ -12,9 +12,7 @@
 // the Mozilla Public License, v. 2.0.
 
 
-use std::sync::{Arc, Mutex};
-use std::ops::DerefMut;
-use std::collections::LinkedList;
+use std::sync::Arc;
 
 use super::FpWrapper;
 use super::types::*;
@@ -54,7 +52,7 @@ impl ResourcePool {
 
         // Initialize woker threads
         let mut w_threads = Vec::<WorkerThread>::with_capacity(num);
-        for x in 0..num {
+        for _ in 0..num {
             w_threads.push(WorkerThread::new());
         }
 
@@ -75,7 +73,7 @@ impl ResourcePool {
             self.next_worker = 0;
         }
 
-        self.w_threads[self.next_worker].sender().send((
+        let _ = self.w_threads[self.next_worker].sender().send((
             fp_wrapper, sockets, socket, buffer
         ));
         self.next_worker += 1;

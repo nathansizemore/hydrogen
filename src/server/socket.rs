@@ -23,7 +23,6 @@ use super::simple_stream::nbetstream::{
     ReadResult,
     WriteResult
 };
-use super::simple_stream::readbuffer::ReadBuffer;
 
 
 /// Represents an epoll controlled Async socket

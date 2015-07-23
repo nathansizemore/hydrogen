@@ -29,7 +29,8 @@ void *write_tx;
 // Sender<T> given to us from Rust to stop the client
 void *stop_tx;
 
-//
+// I dunno what I was going to put here, but I'll remember eventually...
+
 
 // Registers the address of Rust's Sender<T> used to signal the write
 // thread there is a message to send
@@ -46,9 +47,9 @@ void register_stop_tx(void *tx)
 }
 
 // Calls Rust
-void write(const char *buffer)
+void write(const char *buffer, int count)
 {
-    int result = send_to_writer(write_tx, buffer);
+    int result = send_to_writer(write_tx, buffer, count, stop_tx);
     if (result == -1)
     {
         // TODO - Determine if stdout msgs should report here or in Rust
