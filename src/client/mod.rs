@@ -30,6 +30,7 @@ extern "C" {
 
 /// Connects to the provided address, (eg "123.123.123.123:3000") and registers
 /// the on data received handler
+#[no_mangle]
 pub extern "C" fn connect(address: *const c_char,
     handler: extern fn(*const c_char, c_int),
     on_connect_handler: extern fn(),
@@ -110,6 +111,7 @@ pub extern "C" fn connect(address: *const c_char,
 
 /// Writes the complete contents of buffer to the server
 /// Returns -1 on error
+#[no_mangle]
 pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
                                  buffer: *const c_char,
                                  count: c_int,
