@@ -53,5 +53,6 @@ void write(const char *buffer, int count)
 int test_from_middle_c()
 {
     printf("%s\n", "test_from_middle_c");
+    int g = test();
     return 67;
 }
