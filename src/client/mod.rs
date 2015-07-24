@@ -36,6 +36,9 @@ pub extern "C" fn connect(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
+
+    println!("Hello!");
+
     let mut r_address;
     unsafe {
         r_address = CStr::from_ptr(address);
