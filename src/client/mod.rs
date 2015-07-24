@@ -57,21 +57,21 @@ pub extern "C" fn connect(address: *const c_char,
         register_stop_tx(&mut *k_tx_ptr);
     }
 
-    // // Writer thread's channel
-    // let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-    // let mut w_tx_ptr = Box::new(w_tx);
-    // unsafe {
-    //     register_writer_tx(&mut *w_tx_ptr);
-    // }
-    //
-    // let result = TcpStream::connect(host_address);
-    // if result.is_err() {
-    //     println!("Error connecting to {} - {}", host_address, result.unwrap_err());
-    //     return -1 as c_int;
-    // }
-    // println!("Connected");
-    // on_connect_handler();
-    //
+    // Writer thread's channel
+    let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    let mut w_tx_ptr = Box::new(w_tx);
+    unsafe {
+        register_writer_tx(&mut *w_tx_ptr);
+    }
+
+    let result = TcpStream::connect(host_address);
+    if result.is_err() {
+        println!("Error connecting to {} - {}", host_address, result.unwrap_err());
+        return -1 as c_int;
+    }
+    println!("Connected");
+    on_connect_handler();
+
     // let stream = result.unwrap();
     // let client = Bstream::new(stream);
     //
