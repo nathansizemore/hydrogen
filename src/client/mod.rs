@@ -36,9 +36,18 @@ pub extern "C" fn connect(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
+        let mut buffer = Vec::<u8>::with_capacity(2);
+        buffer.push(65u8);
+        buffer.push(65u8);
+
+        let slice = &buffer[..];
+        let c_buffer = CString::new(slice).unwrap();
+        handler(c_buffer.as_ptr(), buffer.len() as c_int);
+
     unsafe {
         on_connect_handler();
         on_disconnect_handler();
+        handler(c_buffer.as_ptr(), buffer.len() as c_int);
     }
 
     1 as c_int
