@@ -16,12 +16,6 @@
 #include <stdlib.h>
 
 
-// Because of the lack of a .h file with Rust code, we are declaring
-// the extern functions in Rust land that we expect to be able to use
-// once the linking phase begins
-extern int connect(const char *address, void (*handler)(const char *, const int len));
-extern int send_to_writer(void *w_tx, const char *buffer, int count, void *s_tx);
-
 
 // Writer Sender<T> given to us from Rust
 void *write_tx;
