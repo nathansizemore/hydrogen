@@ -64,7 +64,7 @@ pub extern "C" fn connect(address: *const c_char,
         register_writer_tx(&mut *w_tx_ptr);
     }
 
-    println!("host_address: {}", host_address);
+    // println!("host_address: {}", host_address);
 
     // let result = TcpStream::connect(host_address);
     // if result.is_err() {
