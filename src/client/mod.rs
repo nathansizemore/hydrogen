@@ -29,7 +29,6 @@ extern "C" {
 
 #[no_mangle]
 pub extern "C" fn test() -> i32 {
-    println!("Hello from Rust!");
     17i32
 }
 

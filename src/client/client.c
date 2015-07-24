@@ -49,10 +49,3 @@ void write(const char *buffer, int count)
         // TODO - Determine if stdout msgs should report here or in Rust
     }
 }
-
-int test_from_middle_c()
-{
-    printf("%s\n", "test_from_middle_c");
-    int g = test();
-    return 67;
-}
