@@ -36,38 +36,19 @@ pub extern "C" fn connect(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
-        let mut buffer = Vec::<u8>::with_capacity(2);
-        buffer.push(65u8);
-        buffer.push(65u8);
-
-        let slice = &buffer[..];
-        let c_buffer = CString::new(slice).unwrap();
-        handler(c_buffer.as_ptr(), buffer.len() as c_int);
-
+    let mut r_address;
     unsafe {
-        on_connect_handler();
-        on_disconnect_handler();
-        handler(c_buffer.as_ptr(), buffer.len() as c_int);
+        r_address = CStr::from_ptr(address);
     }
+    let s_address = r_address.to_bytes();
+    let host_address = match str::from_utf8(s_address) {
+        Ok(safe_str) => safe_str,
+        Err(_) => {
+            println!("Invalid host address");
+            return -1 as c_int;
+        }
+    };
 
-    1 as c_int
-
-
-
-
-    // let mut r_address;
-    // unsafe {
-    //     r_address = CStr::from_ptr(address);
-    // }
-    // let s_address = r_address.to_bytes();
-    // let host_address = match str::from_utf8(s_address) {
-    //     Ok(safe_str) => safe_str,
-    //     Err(_) => {
-    //         println!("Invalid host address");
-    //         return -1 as c_int;
-    //     }
-    // };
-    //
     // // Create and register a way to kill this client
     // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
     // let kill_tx = k_tx.clone();
@@ -123,9 +104,9 @@ pub extern "C" fn connect(address: *const c_char,
     //     }
     // };
     // on_disconnect_handler();
-    //
-    // // Exit out in standard C fashion
-    // 0 as c_int
+
+    // Exit out in standard C fashion
+    0 as c_int
 }
 
 /// Writes the complete contents of buffer to the server
