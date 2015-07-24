@@ -12,40 +12,37 @@
 // the Mozilla Public License, v. 2.0.
 
 
-#include <stdio.h>
-#include <stdlib.h>
-
 // Rust function prototypes
-int send_to_writer(void *w_tx, const char *buffer, const int count, void *k_tx);
+// int send_to_writer(void *w_tx, const char *buffer, const int count, void *k_tx);
 
 
-// Writer Sender<T> given to us from Rust
-void *write_tx;
-
-// Sender<T> given to us from Rust to stop the client
-void *stop_tx;
+// // Writer Sender<T> given to us from Rust
+// void *write_tx;
+//
+// // Sender<T> given to us from Rust to stop the client
+// void *stop_tx;
 
 
 // Registers the address of Rust's Sender<T> used to signal the write
 // thread there is a message to send
 void register_writer_tx(void *tx)
 {
-    write_tx = tx;
+    // write_tx = tx;
 }
 
 // Registers the address of Rust's Sender<T> used to signal the lib
 // to disconnect and exit
 void register_stop_tx(void *tx)
 {
-    stop_tx = tx;
+    // stop_tx = tx;
 }
-
-// Calls Rust
-void write(const char *buffer, int count)
-{
-    int result = send_to_writer(write_tx, buffer, count, stop_tx);
-    if (result == -1)
-    {
-        // TODO - Determine if stdout msgs should report here or in Rust
-    }
-}
+//
+// // Calls Rust
+// void write(const char *buffer, int count)
+// {
+//     int result = send_to_writer(write_tx, buffer, count, stop_tx);
+//     if (result == -1)
+//     {
+//         // TODO - Determine if stdout msgs should report here or in Rust
+//     }
+// }

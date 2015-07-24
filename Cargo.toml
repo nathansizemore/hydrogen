@@ -11,7 +11,8 @@ build = "build.rs"
 
 [lib]
 name = "hydrogen"
-crate-type = ["rlib", "dylib", "staticlib"]
+crate-type = ["staticlib"]
+# crate-type = ["rlib", "dylib", "staticlib"]
 
 [build-dependencies]
 gcc = "*"
