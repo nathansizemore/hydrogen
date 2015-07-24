@@ -27,6 +27,11 @@ extern "C" {
     fn register_stop_tx(tx: *mut Sender<()>);
 }
 
+#[no_mangle]
+pub extern "C" fn test() -> i32 {
+    println!("Hello from Rust!");
+    17i32
+}
 
 /// Connects to the provided address, (eg "123.123.123.123:3000") and registers
 /// the on data received handler
