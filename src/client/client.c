@@ -20,7 +20,7 @@
 // the extern functions in Rust land that we expect to be able to use
 // once the linking phase begins
 extern int connect(const char *address, void (*handler)(const char *, const int len));
-extern int send_to_writer(void *w_tx, const char *buffer);
+extern int send_to_writer(void *w_tx, const char *buffer, int count, void *s_tx);
 
 
 // Writer Sender<T> given to us from Rust
@@ -36,14 +36,14 @@ void *stop_tx;
 // thread there is a message to send
 void register_writer_tx(void *tx)
 {
-    write_tx = *tx;
+    write_tx = tx;
 }
 
 // Registers the address of Rust's Sender<T> used to signal the lib
 // to disconnect and exit
 void register_stop_tx(void *tx)
 {
-    stop_tx = *tx;
+    stop_tx = tx;
 }
 
 // Calls Rust

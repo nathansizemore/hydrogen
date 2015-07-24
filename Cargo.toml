@@ -8,11 +8,13 @@ readme = "README.md"
 keywords = ["presence"]
 license = "MPL 2.0"
 build = "build.rs"
-# links = ""
 
 [lib]
 name = "hydrogen"
-crate_type = ["dylib"]
+crate_type = ["dylib", "static"]
+
+[build-dependencies]
+gcc = "*"
 
 # From crates.io
 [dependencies]
