@@ -36,6 +36,9 @@ pub extern "C" fn connect(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
+
+
+    println!("Hello!");
     0 as c_int
 
     // let mut r_address;
