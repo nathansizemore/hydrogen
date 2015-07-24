@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Rust function prototypes
+int send_to_writer(void *w_tx, const char *buffer, const int count, void *k_tx);
 
 
 // Writer Sender<T> given to us from Rust
@@ -22,8 +24,6 @@ void *write_tx;
 
 // Sender<T> given to us from Rust to stop the client
 void *stop_tx;
-
-// I dunno what I was going to put here, but I'll remember eventually...
 
 
 // Registers the address of Rust's Sender<T> used to signal the write

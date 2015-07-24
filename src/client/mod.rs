@@ -36,38 +36,35 @@ pub extern "C" fn connect(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
+    0 as c_int
 
-    println!("Hello!");
-
-    let mut r_address;
-    unsafe {
-        r_address = CStr::from_ptr(address);
-    }
-    let s_address = r_address.to_bytes();
-    let host_address = match str::from_utf8(s_address) {
-        Ok(safe_str) => safe_str,
-        Err(_) => {
-            println!("Invalid host address");
-            return -1 as c_int;
-        }
-    };
-
-    // Create and register a way to kill this client
-    let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    let kill_tx = k_tx.clone();
-    let mut k_tx_ptr = Box::new(k_tx);
-    unsafe {
-        register_stop_tx(&mut *k_tx_ptr);
-    }
-
-    // Writer thread's channel
-    let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-    let mut w_tx_ptr = Box::new(w_tx);
-    unsafe {
-        register_writer_tx(&mut *w_tx_ptr);
-    }
-
-    // println!("host_address: {}", host_address);
+    // let mut r_address;
+    // unsafe {
+    //     r_address = CStr::from_ptr(address);
+    // }
+    // let s_address = r_address.to_bytes();
+    // let host_address = match str::from_utf8(s_address) {
+    //     Ok(safe_str) => safe_str,
+    //     Err(_) => {
+    //         println!("Invalid host address");
+    //         return -1 as c_int;
+    //     }
+    // };
+    //
+    // // Create and register a way to kill this client
+    // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    // let kill_tx = k_tx.clone();
+    // let mut k_tx_ptr = Box::new(k_tx);
+    // unsafe {
+    //     register_stop_tx(&mut *k_tx_ptr);
+    // }
+    //
+    // // Writer thread's channel
+    // let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    // let mut w_tx_ptr = Box::new(w_tx);
+    // unsafe {
+    //     register_writer_tx(&mut *w_tx_ptr);
+    // }
 
     // let result = TcpStream::connect(host_address);
     // if result.is_err() {
@@ -111,7 +108,7 @@ pub extern "C" fn connect(address: *const c_char,
     // on_disconnect_handler();
 
     // Exit out in standard C fashion
-    0 as c_int
+    // 0 as c_int
 }
 
 /// Writes the complete contents of buffer to the server
