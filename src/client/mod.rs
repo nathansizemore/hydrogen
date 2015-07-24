@@ -29,6 +29,7 @@ extern "C" {
 
 #[no_mangle]
 pub extern "C" fn test() -> i32 {
+    println!("Test");
     17i32
 }
 
