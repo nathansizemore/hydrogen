@@ -11,7 +11,7 @@
 // With Secondary Licenses", as defined by
 // the Mozilla Public License, v. 2.0.
 
-
+#![allow(dead_code)]
 
 #[cfg(any(target_os="macos", target_os="linux"))]
 extern crate libc;
