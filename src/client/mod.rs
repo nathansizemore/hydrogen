@@ -60,16 +60,16 @@ pub extern "C" fn start(address: *const c_char,
 
     println!("Rust - address: {}", host_address);
 
-    // Create and register a way to kill this client
-    let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    let kill_tx = k_tx.clone();
-    let mut k_tx_ptr = Box::new(k_tx);
-
-    println!("calling register_stop_tx");
-
-    unsafe {
-        register_stop_tx(&mut *k_tx_ptr);
-    }
+    // // Create and register a way to kill this client
+    // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    // let kill_tx = k_tx.clone();
+    // let mut k_tx_ptr = Box::new(k_tx);
+    //
+    // println!("calling register_stop_tx");
+    //
+    // unsafe {
+    //     register_stop_tx(&mut *k_tx_ptr);
+    // }
     //
     // // Writer thread's channel
     // let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
