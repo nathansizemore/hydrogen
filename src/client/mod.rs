@@ -23,7 +23,7 @@ use super::simple_stream::bstream::Bstream;
 
 
 #[link(name = "client")]
-extern "C" {
+extern {
     fn register_writer_tx(tx: *mut c_void);
     fn register_stop_tx(tx: *mut c_void);
 }
