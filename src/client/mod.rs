@@ -27,6 +27,11 @@ extern "C" {
     fn register_stop_tx(tx: *mut Sender<()>);
 }
 
+#[no_mangle]
+pub extern "C" fn testing_fn() -> c_int {
+    78 as c_int
+}
+
 /// Connects to the provided address, (eg "123.123.123.123:3000") and registers
 /// the on data received handler
 #[no_mangle]
