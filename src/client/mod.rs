@@ -29,6 +29,7 @@ extern "C" {
 
 #[no_mangle]
 pub extern "C" fn testing_fn() -> c_int {
+    println!("Hello from Rust :)");
     78 as c_int
 }
 
