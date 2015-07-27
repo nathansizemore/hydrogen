@@ -60,23 +60,23 @@ pub extern "C" fn start(address: *const c_char,
 
     println!("Rust - address: {}", host_address);
 
-    // // Create and register a way to kill this client
-    // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    // let kill_tx = k_tx.clone();
-    // let mut k_tx_ptr = Box::new(k_tx);
-    // unsafe {
-    //     register_stop_tx(&mut *k_tx_ptr);
-    // }
-    //
-    // // Writer thread's channel
-    // let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-    // let mut w_tx_ptr = Box::new(w_tx);
-    // unsafe {
-    //     register_writer_tx(&mut *w_tx_ptr);
-    // }
-    //
-    // println!("Attempting connect to: {}", host_address);
-    //
+    // Create and register a way to kill this client
+    let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    let kill_tx = k_tx.clone();
+    let mut k_tx_ptr = Box::new(k_tx);
+    unsafe {
+        register_stop_tx(&mut *k_tx_ptr);
+    }
+
+    // Writer thread's channel
+    let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    let mut w_tx_ptr = Box::new(w_tx);
+    unsafe {
+        register_writer_tx(&mut *w_tx_ptr);
+    }
+
+    println!("Attempting connect to: {}", host_address);
+
     // let result = TcpStream::connect(host_address);
     // if result.is_err() {
     //     println!("Error connecting to {} - {}", host_address, result.unwrap_err());
