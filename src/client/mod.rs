@@ -33,7 +33,7 @@ pub extern "C" fn start(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
-    // println!("Rust - start()");
+    println!("Rust - start()");
     //
     // let mut r_address;
     // unsafe {
