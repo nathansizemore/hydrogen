@@ -13,7 +13,6 @@
 
 
 #include <stdio.h>
-#include <stdlib.h>
 
 
 // Rust function prototypes
@@ -29,7 +28,7 @@ void *stop_tx;
 
 // Registers the address of Rust's Sender<T> used to signal the write
 // thread there is a message to send
-void register_writer_tx(void *tx)
+extern void register_writer_tx(void *tx)
 {
     printf("%s\n", "C.register_writer_tx");
     //write_tx = tx;
@@ -37,18 +36,8 @@ void register_writer_tx(void *tx)
 
 // Registers the address of Rust's Sender<T> used to signal the lib
 // to disconnect and exit
-void register_stop_tx(void *tx)
+extern void register_stop_tx(void *tx)
 {
     printf("%s\n", "C.register_stop_tx");
     //stop_tx = tx;
-}
-
-// Calls Rust
-void write(const char *buffer, const int count)
-{
-    int result = send_to_writer(write_tx, buffer, count, stop_tx);
-    if (result == -1)
-    {
-        // TODO - Determine if stdout msgs should report here or in Rust
-    }
 }
