@@ -27,12 +27,6 @@ extern "C" {
     fn register_stop_tx(tx: *mut c_void);
 }
 
-// #[no_mangle]
-// pub extern "C" fn some_new_fn() -> c_int {
-//     println!("some_new_fn");
-//     65 as c_int
-// }
-
 #[no_mangle]
 pub extern "C" fn start(address: *const c_char,
     handler: extern fn(*const c_char, c_int),
@@ -41,9 +35,6 @@ pub extern "C" fn start(address: *const c_char,
 
 
     println!("Rust - start()");
-
-    // println!("start");
-    // 88 as c_int
 
     let mut r_address;
     unsafe {
@@ -70,7 +61,7 @@ pub extern "C" fn start(address: *const c_char,
     let mut k_tx_ptr_clone = k_tx_ptr.clone();
     unsafe {
         let mut k_tx_as_void_ptr: *mut c_void = mem::transmute(k_tx_ptr_clone);
-        register_stop_tx(&mut *k_tx_as_void_ptr);
+        //register_stop_tx(&mut *k_tx_as_void_ptr);
     }
     //
     // // Writer thread's channel
