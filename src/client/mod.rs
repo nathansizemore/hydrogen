@@ -36,38 +36,44 @@ pub extern "C" fn start(address: *const c_char,
 
     println!("Rust - start()");
 
-    println!("Calling test external");
     unsafe {
-        to_c_test();
+        // handler();
+        on_connect_handler();
+        on_disconnect_handler();
     }
 
-    let mut r_address;
-    unsafe {
-        r_address = CStr::from_ptr(address);
-    }
-    let s_address = r_address.to_bytes();
-    let host_address = match str::from_utf8(s_address) {
-        Ok(safe_str) => safe_str,
-        Err(_) => {
-            println!("Invalid host address");
-            return -1 as c_int;
-        }
-    };
-
-    println!("Rust - address: {}", host_address);
-
-    // Create and register a way to kill this client
-    let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    let kill_tx = k_tx.clone();
-    let mut k_tx_ptr = Box::new(k_tx);
-
-    println!("calling register_stop_tx");
-
-    let mut k_tx_ptr_clone = k_tx_ptr.clone();
-    unsafe {
-        let mut k_tx_as_void_ptr: *mut c_void = mem::transmute(k_tx_ptr_clone);
-        //register_stop_tx(&mut *k_tx_as_void_ptr);
-    }
+    // println!("Calling test external");
+    // unsafe {
+    //     to_c_test();
+    // }
+    //
+    // let mut r_address;
+    // unsafe {
+    //     r_address = CStr::from_ptr(address);
+    // }
+    // let s_address = r_address.to_bytes();
+    // let host_address = match str::from_utf8(s_address) {
+    //     Ok(safe_str) => safe_str,
+    //     Err(_) => {
+    //         println!("Invalid host address");
+    //         return -1 as c_int;
+    //     }
+    // };
+    //
+    // println!("Rust - address: {}", host_address);
+    //
+    // // Create and register a way to kill this client
+    // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    // let kill_tx = k_tx.clone();
+    // let mut k_tx_ptr = Box::new(k_tx);
+    //
+    // println!("calling register_stop_tx");
+    //
+    // let mut k_tx_ptr_clone = k_tx_ptr.clone();
+    // unsafe {
+    //     let mut k_tx_as_void_ptr: *mut c_void = mem::transmute(k_tx_ptr_clone);
+    //     register_stop_tx(&mut *k_tx_as_void_ptr);
+    // }
     //
     // // Writer thread's channel
     // let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
