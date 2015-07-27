@@ -25,7 +25,6 @@ use super::simple_stream::bstream::Bstream;
 extern "C" {
     fn register_writer_tx(tx: *mut c_void);
     fn register_stop_tx(tx: *mut c_void);
-    fn to_c_test();
 }
 
 #[no_mangle]
@@ -35,6 +34,7 @@ pub extern "C" fn start(address: *const c_char,
     on_disconnect_handler: extern fn()) -> c_int {
 
     println!("Rust - start()");
+    100 as c_int
 
     // unsafe {
     //     // handler();
@@ -126,7 +126,7 @@ pub extern "C" fn start(address: *const c_char,
     // on_disconnect_handler();
 
     // Exit out in standard C fashion
-    0 as c_int
+    // 0 as c_int
 }
 
 /// Writes the complete contents of buffer to the server
