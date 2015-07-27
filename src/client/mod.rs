@@ -67,9 +67,9 @@ pub extern "C" fn start(address: *const c_char,
 
     println!("calling register_stop_tx");
 
-    // unsafe {
-    //     register_stop_tx(&mut *k_tx_ptr);
-    // }
+    unsafe {
+        register_stop_tx(&mut *k_tx_ptr);
+    }
     //
     // // Writer thread's channel
     // let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
