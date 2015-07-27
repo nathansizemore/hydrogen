@@ -12,19 +12,19 @@
 // the Mozilla Public License, v. 2.0.
 
 
-use std::{str, ptr};
+use std::{str, ptr, mem};
 use std::ffi::{CStr, CString};
 use std::thread;
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-use super::libc::{c_int, c_char};
+use super::libc::{c_int, c_char, c_void};
 use super::simple_stream::bstream::Bstream;
 
 
 extern "C" {
-    fn register_writer_tx(tx: *mut Sender<Vec<u8>>);
-    fn register_stop_tx(tx: *mut Sender<()>);
+    fn register_writer_tx(tx: *mut c_void);
+    fn register_stop_tx(tx: *mut c_void);
 }
 
 // #[no_mangle]
@@ -67,8 +67,10 @@ pub extern "C" fn start(address: *const c_char,
 
     println!("calling register_stop_tx");
 
+    let mut k_tx_ptr_clone = k_tx_ptr.clone();
     unsafe {
-        register_stop_tx(&mut *k_tx_ptr);
+        let mut k_tx_as_void_ptr: *mut c_void = mem::transmute(k_tx_ptr_clone);
+        register_stop_tx(&mut *k_tx_as_void_ptr);
     }
     //
     // // Writer thread's channel
