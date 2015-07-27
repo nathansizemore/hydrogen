@@ -24,8 +24,8 @@ use super::simple_stream::bstream::Bstream;
 
 #[link(name = "client", kind = "static")]
 extern {
-    fn register_writer_tx(tx: *mut c_void);
-    fn register_stop_tx(tx: *mut c_void);
+    fn register_writer_tx(tx: *mut Sender<Vec<u8>>);
+    fn register_stop_tx(tx: *mut Sender<()>);
 }
 
 #[no_mangle]
@@ -57,11 +57,8 @@ pub extern "C" fn start(address: *const c_char,
     let mut k_tx_ptr = Box::new(k_tx);
 
     println!("calling register_stop_tx");
-
-    let mut k_tx_ptr_clone = k_tx_ptr.clone();
     unsafe {
-        let mut k_tx_as_void_ptr: *mut c_void = mem::transmute(k_tx_ptr_clone);
-        register_stop_tx(&mut *k_tx_as_void_ptr);
+        register_stop_tx(&mut *k_tx_ptr);
     }
 
     // Writer thread's channel
@@ -94,7 +91,7 @@ pub extern "C" fn start(address: *const c_char,
     thread::Builder::new()
         .name("ReaderThread".to_string())
         .spawn(move||{
-            reader_thread(r_client, handler, r_kill_tx)
+            reader_thread(r_client, data_handler, r_kill_tx)
         }).unwrap();
 
     // Start the writer thread
