@@ -33,19 +33,7 @@ pub extern "C" fn start(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
-    println!("Rust - start()");
-    100 as c_int
-
-    // unsafe {
-    //     // handler();
-    //     on_connect_handler();
-    //     on_disconnect_handler();
-    // }
-
-    // println!("Calling test external");
-    // unsafe {
-    //     to_c_test();
-    // }
+    // println!("Rust - start()");
     //
     // let mut r_address;
     // unsafe {
@@ -83,7 +71,7 @@ pub extern "C" fn start(address: *const c_char,
     // }
     //
     // println!("Attempting connect to: {}", host_address);
-
+    //
     // let result = TcpStream::connect(host_address);
     // if result.is_err() {
     //     println!("Error connecting to {} - {}", host_address, result.unwrap_err());
@@ -124,9 +112,9 @@ pub extern "C" fn start(address: *const c_char,
     //     }
     // };
     // on_disconnect_handler();
-
-    // Exit out in standard C fashion
-    // 0 as c_int
+    //
+    // // Exit out in standard C fashion
+    0 as c_int
 }
 
 /// Writes the complete contents of buffer to the server
