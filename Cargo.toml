@@ -7,6 +7,7 @@ repository = "https://github.com/nathansizemore/hydrogen"
 readme = "README.md"
 keywords = ["presence"]
 license = "MPL 2.0"
+links = "client"
 build = "build.rs"
 
 [lib]
