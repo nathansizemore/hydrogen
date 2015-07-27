@@ -22,6 +22,7 @@ use super::libc::{c_int, c_char, c_void};
 use super::simple_stream::bstream::Bstream;
 
 
+#[link(name = "client")]
 extern "C" {
     fn register_writer_tx(tx: *mut c_void);
     fn register_stop_tx(tx: *mut c_void);
