@@ -64,6 +64,9 @@ pub extern "C" fn start(address: *const c_char,
     let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
     let kill_tx = k_tx.clone();
     let mut k_tx_ptr = Box::new(k_tx);
+
+    println!("calling register_stop_tx");
+
     unsafe {
         register_stop_tx(&mut *k_tx_ptr);
     }

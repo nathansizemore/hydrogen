@@ -27,6 +27,7 @@ void *stop_tx;
 // thread there is a message to send
 void register_writer_tx(void *tx)
 {
+    printf("%s\n", "C.register_writer_tx");
     write_tx = tx;
 }
 
@@ -34,11 +35,12 @@ void register_writer_tx(void *tx)
 // to disconnect and exit
 void register_stop_tx(void *tx)
 {
+    printf("%s\n", "C.register_stop_tx");
     stop_tx = tx;
 }
 
 // Calls Rust
-void write(const char *buffer, int count)
+void write(const char *buffer, const int count)
 {
     int result = send_to_writer(write_tx, buffer, count, stop_tx);
     if (result == -1)
