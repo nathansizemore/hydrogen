@@ -27,12 +27,6 @@ extern "C" {
     fn register_stop_tx(tx: *mut Sender<()>);
 }
 
-#[no_mangle]
-pub extern "C" fn testing_fn() -> c_int {
-    println!("Hello from Rust :)");
-    78 as c_int
-}
-
 /// Connects to the provided address, (eg "123.123.123.123:3000") and registers
 /// the on data received handler
 #[no_mangle]
@@ -43,82 +37,80 @@ pub extern "C" fn connect(address: *const c_char,
 
     println!("Rust - connect");
 
-    78 as c_int
 
+    let mut r_address;
+    unsafe {
+        r_address = CStr::from_ptr(address);
+    }
+    let s_address = r_address.to_bytes();
+    let host_address = match str::from_utf8(s_address) {
+        Ok(safe_str) => safe_str,
+        Err(_) => {
+            println!("Invalid host address");
+            return -1 as c_int;
+        }
+    };
 
-    // let mut r_address;
-    // unsafe {
-    //     r_address = CStr::from_ptr(address);
-    // }
-    // let s_address = r_address.to_bytes();
-    // let host_address = match str::from_utf8(s_address) {
-    //     Ok(safe_str) => safe_str,
-    //     Err(_) => {
-    //         println!("Invalid host address");
-    //         return -1 as c_int;
-    //     }
-    // };
-    //
-    // // Create and register a way to kill this client
-    // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    // let kill_tx = k_tx.clone();
-    // let mut k_tx_ptr = Box::new(k_tx);
-    // unsafe {
-    //     register_stop_tx(&mut *k_tx_ptr);
-    // }
-    //
-    // // Writer thread's channel
-    // let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-    // let mut w_tx_ptr = Box::new(w_tx);
-    // unsafe {
-    //     register_writer_tx(&mut *w_tx_ptr);
-    // }
-    //
-    // println!("Attempting connect to: {}", host_address);
-    //
-    // let result = TcpStream::connect(host_address);
-    // if result.is_err() {
-    //     println!("Error connecting to {} - {}", host_address, result.unwrap_err());
-    //     return -1 as c_int;
-    // }
-    // println!("Connected");
-    // on_connect_handler();
-    //
-    // let stream = result.unwrap();
-    // let client = Bstream::new(stream);
-    //
-    // let r_client = client.clone();
-    // let r_kill_tx = kill_tx.clone();
-    //
-    // let w_client = client.clone();
-    // let w_kill_tx = kill_tx.clone();
-    //
-    // // Start the reader thread
-    // thread::Builder::new()
-    //     .name("ReaderThread".to_string())
-    //     .spawn(move||{
-    //         reader_thread(r_client, handler, r_kill_tx)
-    //     }).unwrap();
-    //
-    // // Start the writer thread
-    // thread::Builder::new()
-    //     .name("WriterThread".to_string())
-    //     .spawn(move||{
-    //         writer_thread(w_rx, w_client, w_kill_tx)
-    //     }).unwrap();
-    //
-    // // Wait for the kill signal
-    // match kill_rx.recv() {
-    //     Ok(_) => { }
-    //     Err(e) => {
-    //         println!("Error on kill channel: {}", e);
-    //         return -1 as c_int;
-    //     }
-    // };
-    // on_disconnect_handler();
-    //
-    // // Exit out in standard C fashion
-    // 0 as c_int
+    // Create and register a way to kill this client
+    let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    let kill_tx = k_tx.clone();
+    let mut k_tx_ptr = Box::new(k_tx);
+    unsafe {
+        register_stop_tx(&mut *k_tx_ptr);
+    }
+
+    // Writer thread's channel
+    let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    let mut w_tx_ptr = Box::new(w_tx);
+    unsafe {
+        register_writer_tx(&mut *w_tx_ptr);
+    }
+
+    println!("Attempting connect to: {}", host_address);
+
+    let result = TcpStream::connect(host_address);
+    if result.is_err() {
+        println!("Error connecting to {} - {}", host_address, result.unwrap_err());
+        return -1 as c_int;
+    }
+    println!("Connected");
+    on_connect_handler();
+
+    let stream = result.unwrap();
+    let client = Bstream::new(stream);
+
+    let r_client = client.clone();
+    let r_kill_tx = kill_tx.clone();
+
+    let w_client = client.clone();
+    let w_kill_tx = kill_tx.clone();
+
+    // Start the reader thread
+    thread::Builder::new()
+        .name("ReaderThread".to_string())
+        .spawn(move||{
+            reader_thread(r_client, handler, r_kill_tx)
+        }).unwrap();
+
+    // Start the writer thread
+    thread::Builder::new()
+        .name("WriterThread".to_string())
+        .spawn(move||{
+            writer_thread(w_rx, w_client, w_kill_tx)
+        }).unwrap();
+
+    // Wait for the kill signal
+    match kill_rx.recv() {
+        Ok(_) => { }
+        Err(e) => {
+            println!("Error on kill channel: {}", e);
+            return -1 as c_int;
+        }
+    };
+    on_disconnect_handler();
+
+    // Exit out in standard C fashion
+    0 as c_int
 }
 
 /// Writes the complete contents of buffer to the server
