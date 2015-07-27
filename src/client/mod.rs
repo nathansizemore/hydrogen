@@ -35,6 +35,8 @@ pub extern "C" fn connect(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
+    println!("Rust - connect");
+
     let mut r_address;
     unsafe {
         r_address = CStr::from_ptr(address);
@@ -62,6 +64,8 @@ pub extern "C" fn connect(address: *const c_char,
     unsafe {
         register_writer_tx(&mut *w_tx_ptr);
     }
+
+    println!("Attempting connect to: {}", host_address);
 
     let result = TcpStream::connect(host_address);
     if result.is_err() {
