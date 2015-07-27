@@ -30,7 +30,7 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn some_new_fn() -> c_int {
     println!("Whatadfsasdf");
-    65 as c_int;
+    65 as c_int
 }
 
 /// Connects to the provided address, (eg "123.123.123.123:3000") and registers
