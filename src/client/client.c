@@ -31,7 +31,7 @@ void *stop_tx;
 extern void register_writer_tx(void *tx)
 {
     printf("%s\n", "C.register_writer_tx");
-    //write_tx = tx;
+    write_tx = tx;
 }
 
 // Registers the address of Rust's Sender<T> used to signal the lib
@@ -39,5 +39,11 @@ extern void register_writer_tx(void *tx)
 extern void register_stop_tx(void *tx)
 {
     printf("%s\n", "C.register_stop_tx");
-    //stop_tx = tx;
+    stop_tx = tx;
+}
+
+extern void write(const char *buffer, const int length)
+{
+    printf("%s\n", "C.write");
+    return send_to_writer(write_tx, buffer, length, stop_tx);
 }
