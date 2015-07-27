@@ -66,7 +66,7 @@ pub extern "C" fn start(address: *const c_char,
     let mut k_tx_ptr_clone = k_tx_ptr.clone();
     unsafe {
         let mut k_tx_as_void_ptr: *mut c_void = mem::transmute(k_tx_ptr_clone);
-        register_stop_tx(&mut *k_tx_as_void_ptr);
+        //register_stop_tx(&mut *k_tx_as_void_ptr);
     }
     //
     // // Writer thread's channel
