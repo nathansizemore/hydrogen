@@ -36,6 +36,25 @@ pub extern "C" fn connect(address: *const c_char,
     on_disconnect_handler: extern fn()) -> c_int {
 
     println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
+    println!("Rust - connect");
 
 
     let mut r_address;
