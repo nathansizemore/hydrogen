@@ -25,6 +25,7 @@ use super::simple_stream::bstream::Bstream;
 extern "C" {
     fn register_writer_tx(tx: *mut c_void);
     fn register_stop_tx(tx: *mut c_void);
+    fn to_c_test();
 }
 
 #[no_mangle]
@@ -33,8 +34,12 @@ pub extern "C" fn start(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
-
     println!("Rust - start()");
+
+    println!("Calling test external");
+    unsafe {
+        to_c_test();
+    }
 
     let mut r_address;
     unsafe {

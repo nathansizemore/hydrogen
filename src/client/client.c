@@ -52,3 +52,8 @@ extern void write(const char *buffer, const int count)
         // TODO - Determine if stdout msgs should report here or in Rust
     }
 }
+
+extern void to_c_test()
+{
+    printf("%s\n", "C.to_c_test");
+}
