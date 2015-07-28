@@ -113,7 +113,7 @@ impl EventLoop {
                         events: (event_type::EPOLLIN | event_type::EPOLLET)
                         });
                     match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, event) {
-                        Ok(()) => {},
+                        Ok(()) => println!("New socket added to epoll list"),
                         Err(e) => println!("Epoll CtrlError: {}", e)
                     };
                 }
@@ -127,10 +127,11 @@ impl EventLoop {
         // If we get here, shit is real bad. It means we have lost our
         // channel to the outside world.
         // Kill off event loop, so unwinding can begin
+        println!("Rust.EventLoop.start - thread finished");
         let _ = err_tx.send(());
     }
 
-    ///
+    /// Calls epoll_wait forever waiting for events to be fired up from kernel
     fn epoll_loop(uspace_tx: Sender<EventTuple>,
                   sockets: SocketList,
                   epoll_instance: RawFd,
@@ -175,6 +176,7 @@ impl EventLoop {
                 }
             }
         }
+        println!("Rust.EventLoop.epoll_loop - thread finished");
     }
 
     /// Processes a read on the socket that is ready for reading
@@ -192,6 +194,8 @@ impl EventLoop {
     fn handle_epoll_event(uspace_tx: Sender<EventTuple>,
                           event: &EpollEvent,
                           sockets: SocketList) {
+
+        println!("Rust.EventLoop.handle_epoll_event");
 
         // The fd we are traversing the list for
         let fd = event.data;
@@ -214,6 +218,7 @@ impl EventLoop {
                 // Lets attempt to read from it
                 match socket.read() {
                     Ok(()) => {
+                        println!("Rust.EventLoop.handle_epoll_event.socket.read.Ok()");
                         for msg in socket.buffer().iter() {
                             let list_handle = s_list_clone.clone();
                             let socket_clone = socket.clone();
@@ -221,8 +226,8 @@ impl EventLoop {
                             let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
                         }
                     }
-                    Err(_) => {
-                        // TODO - Figure out how to handle
+                    Err(e) => {
+                        println!("Rust.EventLoop.handle_epoll_event.socket.read.Err(e): {}", e);
                     }
                 }
             }

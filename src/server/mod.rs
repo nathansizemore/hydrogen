@@ -116,21 +116,23 @@ impl Server {
 
     /// Registers the function to execute when data is received
     pub fn on_data_received(&mut self, execute: EventFunctionPtr) {
-        println!("on_data_received");
+        println!("Rust.server.on_data_received");
         self.fp_wrapper = Arc::new(FpWrapper::new(execute));
     }
 
     /// Starts the server listening to the event loop
     pub fn begin(&mut self) {
+        println!("Rust.Server.begin");
         let mut r_pool = ResourcePool::new();
         loop {
             match self.data_rx.recv() {
                 Ok((sockets, socket, buff)) => {
+                    println!("Rust.Server.begin.data_rx.recv.Ok()");
                     let fp_wrapper = self.fp_wrapper.clone();
                     r_pool.run(fp_wrapper, sockets, socket, buff);
                 }
-                Err(_) => {
-                    // TODO - Figure out a way to restart the event loop
+                Err(e) => {
+                    println!("Rust.Server.begin.data_rx.recv.Err(): {}", e);
                 }
             }
         }

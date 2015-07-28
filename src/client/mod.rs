@@ -12,13 +12,13 @@
 // the Mozilla Public License, v. 2.0.
 
 
-use std::{str, ptr, mem};
+use std::{str, ptr};
 use std::ffi::{CStr, CString};
 use std::thread;
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-use super::libc::{c_int, c_char, c_void};
+use super::libc::{c_int, c_char};
 use super::simple_stream::bstream::Bstream;
 
 
@@ -122,6 +122,8 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
                                  buffer: *const c_char,
                                  count: c_int,
                                  k_tx: *mut Sender<()>) -> c_int {
+    println!("Rust.send_to_writer");
+
     if count < 1 {
         println!("Error - count must be greater than zero");
         return -1 as c_int;
@@ -154,6 +156,7 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
 fn reader_thread(client: Bstream,
                  event_handler: extern fn(*const c_char, c_int),
                  kill_tx: Sender<()>) {
+    println!("Rust.reader_thread started");
 
     let mut reader = client.clone();
     loop {
@@ -174,13 +177,15 @@ fn reader_thread(client: Bstream,
             }
         };
     }
-    println!("Reader thread finished");
+    println!("Rust.reader_thread finished");
     let _ = kill_tx.send(());
 }
 
 /// Forever listens to Receiver<Vec<u8>> waiting on messages to come in
 /// Once available, blocks until the entire message has been written
 fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream, kill_tx: Sender<()>) {
+    println!("Rust.writer_thread started");
+
     let mut writer = client.clone();
     loop {
         match rx.recv() {
@@ -199,6 +204,7 @@ fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream, kill_tx: Sender<()>) {
             }
         };
     }
-    println!("Writer thread finished");
+
+    println!("Rust.writer_thread finished");
     let _ = kill_tx.send(());
 }
