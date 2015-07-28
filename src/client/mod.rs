@@ -124,29 +124,29 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
                                  k_tx: *mut Sender<()>) -> c_int {
     println!("Rust.send_to_writer");
 
-    if count < 1 {
-        println!("Error - count must be greater than zero");
-        return -1 as c_int;
-    }
-
-    let num_elts = count as usize;
-    let mut n_buffer = Vec::<u8>::with_capacity(num_elts);
-    for x in 0..num_elts as isize {
-        unsafe {
-            n_buffer.push(ptr::read(buffer.offset(x)) as u8);
-        }
-    }
-
-    unsafe {
-        match (*w_tx).send(n_buffer) {
-            Ok(_) => { }
-            Err(e) => {
-                println!("Error sending buffer: {}", e);
-                let _ = (*k_tx).send(());
-                return -1 as c_int;
-            }
-        };
-    }
+    // if count < 1 {
+    //     println!("Error - count must be greater than zero");
+    //     return -1 as c_int;
+    // }
+    //
+    // let num_elts = count as usize;
+    // let mut n_buffer = Vec::<u8>::with_capacity(num_elts);
+    // for x in 0..num_elts as isize {
+    //     unsafe {
+    //         n_buffer.push(ptr::read(buffer.offset(x)) as u8);
+    //     }
+    // }
+    //
+    // unsafe {
+    //     match (*w_tx).send(n_buffer) {
+    //         Ok(_) => { }
+    //         Err(e) => {
+    //             println!("Error sending buffer: {}", e);
+    //             let _ = (*k_tx).send(());
+    //             return -1 as c_int;
+    //         }
+    //     };
+    // }
 
     0 as c_int
 }
