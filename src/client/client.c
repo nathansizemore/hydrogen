@@ -42,9 +42,9 @@ extern void register_stop_tx(void *tx)
     stop_tx = tx;
 }
 
-extern int send(const char *buffer, const int length)
+extern int nate_send(const char *buffer, const int length)
 {
-    printf("%s\n", "C.send");
+    printf("%s\n", "C.nate_send");
 
     if (buffer)
     {
@@ -55,6 +55,8 @@ extern int send(const char *buffer, const int length)
         printf("%s\n", "buffer was null...?");
         return -1;
     }
+
+    return 0;
 
     int result = -99;
     result = send_to_writer(write_tx, buffer, length, stop_tx);
