@@ -56,9 +56,9 @@ extern int nate_send(const char *buffer, const int length)
         return -1;
     }
 
-    return 0;
-
     int result = -99;
     result = send_to_writer(write_tx, buffer, length, stop_tx);
     printf("%s%d\n", "C.send - result: ", result);
+
+    return result;
 }
