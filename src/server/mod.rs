@@ -102,8 +102,13 @@ impl Server {
         let listener = TcpListener::bind(&address[..]).unwrap();
         for stream in listener.incoming() {
             match stream {
-                Ok(stream) => { let _ = eloop_tx.send(stream); }
-                Err(_) => { }
+                Ok(stream) => {
+                    println!("new connection received");
+                    let _ = eloop_tx.send(stream);
+                }
+                Err(e) => {
+                    println!("error receiving connection: {}", e);
+                }
             }
         }
         drop(listener);
@@ -111,6 +116,7 @@ impl Server {
 
     /// Registers the function to execute when data is received
     pub fn on_data_received(&mut self, execute: EventFunctionPtr) {
+        println!("on_data_received");
         self.fp_wrapper = Arc::new(FpWrapper::new(execute));
     }
 

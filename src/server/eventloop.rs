@@ -144,6 +144,7 @@ impl EventLoop {
             // Wait for epoll events
             match epoll::wait(epoll_instance, &mut events[..], -1) {
                 Ok(num_events) => {
+                    println!("{} epoll event(s) received", num_events);
                     for x in 0..num_events {
                         let tx_clone = uspace_tx.clone();
                         let s_clone = sockets.clone();

@@ -44,6 +44,6 @@ extern void register_stop_tx(void *tx)
 
 extern int send(const char *buffer, const int length)
 {
-    printf("%s\n", "C.write");
+    printf("%s\n", "C.send");
     return send_to_writer(write_tx, buffer, length, stop_tx);
 }
