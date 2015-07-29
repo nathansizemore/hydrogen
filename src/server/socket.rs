@@ -71,6 +71,12 @@ impl Socket {
     pub fn buffer(&mut self) -> Vec<Vec<u8>> {
         let internal_buffer = self.stream.buffer_as_mut();
         let queue = internal_buffer.drain_queue();
+
+        println!("queue.len: {}", queue.len());
+        for msg in queue.iter() {
+            println!("queue.msg.len: {}", msg.len());
+        }
+
         queue
     }
 }
