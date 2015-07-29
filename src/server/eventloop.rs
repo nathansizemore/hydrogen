@@ -230,10 +230,10 @@ impl EventLoop {
                                 }
                             };
 
-                            // let list_handle = s_list_clone.clone();
-                            // let socket_clone = socket.clone();
-                            // let msg_clone = msg.clone();
-                            // let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
+                            let list_handle = s_list_clone.clone();
+                            let socket_clone = socket.clone();
+                            let msg_clone = msg.clone();
+                            let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
                         }
                     }
                     Err(e) => {
