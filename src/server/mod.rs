@@ -133,8 +133,9 @@ impl Server {
                 }
                 Err(e) => {
                     println!("Rust.Server.begin.data_rx.recv.Err(): {}", e);
+                    break;
                 }
-            }
+            };
         }
     }
 
