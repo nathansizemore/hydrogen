@@ -221,7 +221,7 @@ impl EventLoop {
                         println!("Rust.EventLoop.handle_epoll_event.socket.read.Ok()");
                         for msg in socket.buffer().iter() {
                             let msg_for_debug = msg.clone();
-                            match String::from_utf8() {
+                            match String::from_utf8(msg_for_debug) {
                                 Ok(msg_str) => {
                                     println!("Rust.EventLoop.handle_epoll_event.socket.read.ok.msg_as_string: {}", msg_str);
                                 }
