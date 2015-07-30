@@ -327,11 +327,11 @@ impl EventLoop {
             }
 
             if index == 1 {
-                s_list.pop_front();
+                sockets.pop_front();
             } else {
-                let mut split = s_list.split_off(index - 1);
+                let mut split = sockets.split_off(index - 1);
                 split.pop_front();
-                s_list.append(&mut split);
+                sockets.append(&mut split);
             }
 
             println!("Socket removed sucessfully");
