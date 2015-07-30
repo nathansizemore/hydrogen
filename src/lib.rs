@@ -39,4 +39,5 @@ pub fn init() {
         output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
         level: log::LogLevelFilter::Trace,
     }, log::LogLevelFilter::Trace);
+    trace!("Logging test :)");
 }

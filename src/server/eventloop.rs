@@ -76,7 +76,8 @@ impl EventLoop {
         let result = epoll::create1(0);
         if result.is_err() {
             let err = result.unwrap_err();
-            panic!("Unable to create epoll instance: {}", err)
+            error!("Unable to create epoll instance: {}", err);
+            panic!()
         }
         let epoll_instance = result.unwrap();
 
@@ -113,21 +114,18 @@ impl EventLoop {
                         events: (event_type::EPOLLIN | event_type::EPOLLET | event_type::EPOLLRDHUP)
                     });
                     match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, event) {
-                        Ok(()) => println!("New socket added to epoll list"),
-                        Err(e) => println!("Epoll CtrlError during add: {}", e)
+                        Ok(()) => trace!("New socket added to epoll list"),
+                        Err(e) => warn!("Epoll CtrlError during add: {}", e)
                     };
                 }
-                Err(e) => {
-                    // TODO - write error to log file
-                    println!("Error: {}", e);
-                }
+                Err(e) => warn!("Unable to create NbetStream: {}", e)
             };
         }
 
         // If we get here, shit is real bad. It means we have lost our
         // channel to the outside world.
         // Kill off event loop, so unwinding can begin
-        println!("Rust.EventLoop.start - thread finished");
+        error!("EpollLoop::start() thread ended unexpectedly");
         let _ = err_tx.send(());
     }
 
@@ -143,10 +141,10 @@ impl EventLoop {
 
         loop {
             // Wait for epoll events
-            println!("epoll_wait...");
+            trace!("epoll_wait...");
             match epoll::wait(epoll_instance, &mut events[..], -1) {
                 Ok(num_events) => {
-                    println!("{} epoll event(s) received", num_events);
+                    trace!("{} epoll event(s) received", num_events);
                     for x in 0..num_events {
                         let tx_clone = uspace_tx.clone();
                         let s_clone = sockets.clone();
@@ -156,9 +154,7 @@ impl EventLoop {
                             &events[x as usize], s_clone, tx_clone);
                     }
                 }
-                Err(e) => {
-                    panic!("Error on epoll::wait(): {}", e)
-                }
+                Err(e) => error!("Error on epoll::wait(): {}", e)
             }
 
             // If we receive anything on this end or lose communication, we need to halt,
@@ -166,21 +162,21 @@ impl EventLoop {
             // gone
             match err_rx.try_recv() {
                 Ok(_) => {
-                    println!("Error, terminating epoll_loop");
+                    error!("Terminating epoll loop");
                     break;
                 }
                 Err(e) => {
                     match e {
                         TryRecvError::Empty => {}
                         _ => {
-                            println!("Error, terminating epoll_loo");
+                            error!("Channel closed, terminating epoll loop");
                             break;
                         }
                     }
                 }
             };
         }
-        println!("epoll_loop - thread finished");
+        warn!("epoll_loop - thread finished");
     }
 
     /// Processes a read on the socket that is ready for reading
@@ -200,7 +196,7 @@ impl EventLoop {
                           sockets: SocketList,
                           uspace_tx: Sender<EventTuple>) {
 
-        println!("handle_epoll_event");
+        trace!("handle_epoll_event");
 
         // List of socket id's that produced an Err on read attempt
         // Cannot do it within the match block because the list will need
@@ -229,15 +225,18 @@ impl EventLoop {
                 // Lets attempt to read from it
                 match socket.read() {
                     Ok(()) => {
-                        println!("Rust.EventLoop.handle_epoll_event.socket.read.Ok()");
+                        trace!("socket.read.Ok()");
                         for msg in socket.buffer().iter() {
                             let msg_for_debug = msg.clone();
                             match String::from_utf8(msg_for_debug) {
-                                Ok(msg_str) => {
-                                    println!("Rust.EventLoop.handle_epoll_event.socket.read.ok.msg_as_string: {}", msg_str);
-                                }
+                                Ok(msg_str) => debug!("msg_as_string: {}", msg_str),
                                 Err(e) => {
-                                    println!("Rust.EventLoop.handle_epoll_event.socket.read.ok.msg_as_string.Err: {}", e);
+                                    warn!("Error converting to UTF-8: {}", e)
+                                    // TODO - Determine if all things must be valid UTF-8
+                                    // Potentially, bitbanging could be used which would
+                                    // produce invalid UTF-8.
+                                    //
+                                    // For now, it just prints a warning
                                 }
                             };
 
@@ -248,7 +247,7 @@ impl EventLoop {
                         }
                     }
                     Err(e) => {
-                        println!("Rust.EventLoop.handle_epoll_event.socket.read.Err(e): {}", e);
+                        debug!("Error reading socket: {}", e);
                         // We really don't care what happened, it all results in the same
                         // outcome - remove the socket from system...
                         errd_socket_ids.push(socket.id());
@@ -266,7 +265,7 @@ impl EventLoop {
 
     /// Removes socket from the epoll watch list
     fn remove_socket_from_epoll(socket: Socket, epoll_instance: RawFd) {
-        println!("remove_socket_from_epoll");
+        debug!("remove_socket_from_epoll");
 
         // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
         // a non-null pointer in event, even though this argument is ignored.
@@ -284,13 +283,13 @@ impl EventLoop {
         // epoll will clean the up the descriptor after they are all dropped from
         // program memory
         match epoll::ctl(epoll_instance, ctl_op::DEL, s_fd, event) {
-            Ok(()) => println!("Socket removed from epoll watch list"),
+            Ok(()) => trace!("Socket removed from epoll watch list"),
             Err(e) => {
                 match e {
                     CtlError::ENOENT => {
-                        println!("Fd not found in epoll, will remove when fd is syscall closed");
+                        trace!("Fd not found in epoll, will remove when fd is syscall closed");
                     }
-                    _ => println!("Epoll CtrlError during del: {}", e)
+                    _ => warn!("Epoll CtrlError during del: {}", e)
                 }
             }
         };
@@ -298,7 +297,7 @@ impl EventLoop {
 
     /// Removes socket from master list
     fn remove_socket_from_list(socket_ids: Vec<u32>, sockets: &mut LinkedList<Socket>) {
-        println!("remove_socket_from_list");
+        debug!("remove_socket_from_list");
 
         for socket_id in socket_ids.iter() {
             let mut socket_found = false;
@@ -312,7 +311,7 @@ impl EventLoop {
             }
 
             if !socket_found {
-                println!("Socket not found in list...?");
+                debug!("Socket not found in list...?");
                 return;
             }
 
@@ -324,7 +323,7 @@ impl EventLoop {
                 sockets.append(&mut split);
             }
 
-            println!("Socket removed sucessfully");
+            debug!("Socket removed sucessfully");
         }
     }
 }
