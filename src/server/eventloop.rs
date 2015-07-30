@@ -201,6 +201,12 @@ impl EventLoop {
 
         println!("Rust.EventLoop.handle_epoll_event");
 
+        // List of socket id's that produced an Err on read attempt
+        // Cannot do it within the match block because the list will need
+        // access to the mutex, while this scope has the mutex, which will result
+        // in a spinlock that will spin forever. And, that's a trip to bummer town
+        let mut errd_socket_ids = Vec::<u32>::new();
+
         // The fd we are traversing the list for
         let fd = event.data;
 
@@ -244,17 +250,17 @@ impl EventLoop {
                         println!("Rust.EventLoop.handle_epoll_event.socket.read.Err(e): {}", e);
                         // We really don't care what happened, it all results in the same
                         // outcome - remove the socket from system...
+                        errd_socket_ids.push(socket.id());
                         let s_clone = socket.clone();
                         let epfd_clone = epoll_instance.clone();
                         EventLoop::remove_socket_from_epoll(s_clone, epfd_clone);
-
-                        let s_id = socket.id();
-                        let list_clone = s_list_clone.clone();
-                        EventLoop::remove_socket_from_list(s_id, list_clone);
                     }
                 }
             }
         }
+
+        // Remove any errd sockets from the master list of sockets
+        EventLoop::remove_socket_from_list(errd_socket_ids, list_clone);
     }
 
     /// Removes socket from the epoll watch list
@@ -290,7 +296,7 @@ impl EventLoop {
     }
 
     /// Removes socket from master list
-    fn remove_socket_from_list(socket_id: u32, sockets: SocketList) {
+    fn remove_socket_from_list(socket_ids: Vec<u32>, sockets: SocketList) {
         println!("remove_socket_from_list");
 
         // TODO - Replace with recoverable version once into_inner() is stable
@@ -303,29 +309,31 @@ impl EventLoop {
         let mut s_guard = sockets.lock().unwrap();
         let s_list = s_guard.deref_mut();
 
-        let mut socket_found = false;
-        let mut index: usize = 1;
-        for socket in s_list.iter() {
-            if socket.id() == socket_id {
-                socket_found = true;
-                break;
+        for socket_id in socket_ids.iter() {
+            let mut socket_found = false;
+            let mut index: usize = 1;
+            for socket in s_list.iter() {
+                if socket.id() == socket_id {
+                    socket_found = true;
+                    break;
+                }
+                index += 1;
             }
-            index += 1;
-        }
 
-        if !socket_found {
-            println!("Socket not found in list...?");
-            return;
-        }
+            if !socket_found {
+                println!("Socket not found in list...?");
+                return;
+            }
 
-        if index == 1 {
-            s_list.pop_front();
-        } else {
-            let mut split = s_list.split_off(index - 1);
-            split.pop_front();
-            s_list.append(&mut split);
-        }
+            if index == 1 {
+                s_list.pop_front();
+            } else {
+                let mut split = s_list.split_off(index - 1);
+                split.pop_front();
+                s_list.append(&mut split);
+            }
 
-        println!("Socket removed sucessfully");
+            println!("Socket removed sucessfully");
+        }
     }
 }
