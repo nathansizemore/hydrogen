@@ -143,6 +143,7 @@ impl EventLoop {
 
         loop {
             // Wait for epoll events
+            println!("epoll_wait...");
             match epoll::wait(epoll_instance, &mut events[..], -1) {
                 Ok(num_events) => {
                     println!("{} epoll event(s) received", num_events);
@@ -177,9 +178,9 @@ impl EventLoop {
                         }
                     }
                 }
-            }
+            };
         }
-        println!("Rust.EventLoop.epoll_loop - thread finished");
+        println!("epoll_loop - thread finished");
     }
 
     /// Processes a read on the socket that is ready for reading
@@ -199,7 +200,7 @@ impl EventLoop {
                           sockets: SocketList,
                           uspace_tx: Sender<EventTuple>) {
 
-        println!("Rust.EventLoop.handle_epoll_event");
+        println!("handle_epoll_event");
 
         // List of socket id's that produced an Err on read attempt
         // Cannot do it within the match block because the list will need
@@ -260,7 +261,7 @@ impl EventLoop {
         }
 
         // Remove any errd sockets from the master list of sockets
-        EventLoop::remove_socket_from_list(errd_socket_ids, s_list_clone);
+        //EventLoop::remove_socket_from_list(errd_socket_ids, s_list_clone);
     }
 
     /// Removes socket from the epoll watch list
