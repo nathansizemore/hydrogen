@@ -44,11 +44,11 @@ extern void register_stop_tx(void *tx)
 
 extern int nate_send(const char *buffer, const int length)
 {
-    printf("%s\n", "C.nate_send");
+    //printf("%s\n", "C.nate_send");
 
     if (buffer)
     {
-        printf("%s%s\n", "buffer: ", buffer);
+        //printf("%s%s\n", "buffer: ", buffer);
     }
     else
     {
@@ -58,7 +58,7 @@ extern int nate_send(const char *buffer, const int length)
 
     int result = -99;
     result = send_to_writer(write_tx, buffer, stop_tx);
-    printf("%s%d\n", "C.send - result: ", result);
+    //printf("%s%d\n", "C.send - result: ", result);
 
     return result;
 }

@@ -34,7 +34,9 @@ pub extern "C" fn start(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
-    println!("Rust - start()");
+    super::init();
+
+    trace!("Rust - start()");
 
     let mut r_address;
     unsafe {
@@ -44,19 +46,19 @@ pub extern "C" fn start(address: *const c_char,
     let host_address = match str::from_utf8(s_address) {
         Ok(safe_str) => safe_str,
         Err(_) => {
-            println!("Invalid host address");
+            error!("Invalid host address");
             return -1 as c_int;
         }
     };
 
-    println!("Rust - address: {}", host_address);
+    trace!("Rust - address: {}", host_address);
 
     // Create and register a way to kill this client
     let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
     let kill_tx = k_tx.clone();
     let mut k_tx_ptr = Box::new(k_tx);
 
-    println!("calling register_stop_tx");
+    trace!("calling register_stop_tx");
     unsafe {
         register_stop_tx(&mut *k_tx_ptr);
     }
@@ -68,14 +70,14 @@ pub extern "C" fn start(address: *const c_char,
         register_writer_tx(&mut *w_tx_ptr);
     }
 
-    println!("Attempting connect to: {}", host_address);
+    debug!("Attempting connect to: {}", host_address);
 
     let result = TcpStream::connect(host_address);
     if result.is_err() {
-        println!("Error connecting to {} - {}", host_address, result.unwrap_err());
+        error!("Error connecting to {} - {}", host_address, result.unwrap_err());
         return -1 as c_int;
     }
-    println!("Connected");
+    debug!("Connected");
     on_connect_handler();
 
     let stream = result.unwrap();
@@ -105,7 +107,7 @@ pub extern "C" fn start(address: *const c_char,
     match kill_rx.recv() {
         Ok(_) => { }
         Err(e) => {
-            println!("Error on kill channel: {}", e);
+            error!("Error on kill channel: {}", e);
             return -1 as c_int;
         }
     };
@@ -121,7 +123,7 @@ pub extern "C" fn start(address: *const c_char,
 pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
                                  buffer: *const c_char,
                                  k_tx: *mut Sender<()>) -> c_int {
-    println!("Rust.send_to_writer");
+    trace!("Rust.send_to_writer");
 
     let mut buf_as_cstr;
     unsafe {
@@ -138,7 +140,7 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
         match (*w_tx).send(n_buffer) {
             Ok(_) => { }
             Err(e) => {
-                println!("Error sending buffer: {}", e);
+                warn!("Error sending buffer: {}", e);
                 let _ = (*k_tx).send(());
                 return -1 as c_int;
             }
@@ -153,7 +155,7 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
 fn reader_thread(client: Bstream,
                  event_handler: extern fn(*const c_char, c_int),
                  kill_tx: Sender<()>) {
-    println!("Rust.reader_thread started");
+    trace!("Rust.reader_thread started");
 
     let mut reader = client.clone();
     loop {
@@ -169,19 +171,19 @@ fn reader_thread(client: Bstream,
                     }).unwrap();
             }
             Err(e) => {
-                println!("Error: {}", e);
+                error!("Error: {}", e);
                 break;
             }
         };
     }
-    println!("Rust.reader_thread finished");
+    debug!("Rust.reader_thread finished");
     let _ = kill_tx.send(());
 }
 
 /// Forever listens to Receiver<Vec<u8>> waiting on messages to come in
 /// Once available, blocks until the entire message has been written
 fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream, kill_tx: Sender<()>) {
-    println!("Rust.writer_thread started");
+    trace!("Rust.writer_thread started");
 
     let mut writer = client.clone();
     loop {
@@ -190,18 +192,18 @@ fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream, kill_tx: Sender<()>) {
                 match writer.write(buffer) {
                     Ok(_) => { }
                     Err(e) => {
-                        println!("Error: {}", e);
+                        error!("Error: {}", e);
                         break;
                     }
                 };
             }
             Err(e) => {
-                println!("Error: {}", e);
+                error!("Error: {}", e);
                 break;
             }
         };
     }
 
-    println!("Rust.writer_thread finished");
+    debug!("Rust.writer_thread finished");
     let _ = kill_tx.send(());
 }
