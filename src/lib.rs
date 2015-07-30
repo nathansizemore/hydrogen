@@ -13,18 +13,30 @@
 
 #![allow(dead_code)]
 
-#[cfg(any(target_os="macos", target_os="linux"))]
+#[macro_use]
+extern crate log;
+extern crate fern;
+extern crate time;
 extern crate libc;
-#[cfg(any(target_os="macos", target_os="linux"))]
 extern crate rand;
-#[cfg(any(target_os="macos", target_os="linux"))]
 extern crate simple_stream;
-#[cfg(any(target_os="macos", target_os="linux"))]
 extern crate num_cpus;
 #[cfg(target_os = "linux")]
 extern crate epoll;
 
-#[cfg(any(target_os="macos", target_os="linux"))]
 pub mod client;
 #[cfg(target_os = "linux")]
 pub mod server;
+
+
+
+/// Initializes all the global things
+pub fn init() {
+    let _ = fern::init_global_logger(fern::DispatchConfig {
+        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
+            format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
+        }),
+        output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
+        level: log::LogLevelFilter::Trace,
+    }, log::LogLevelFilter::Trace);
+}

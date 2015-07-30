@@ -103,11 +103,11 @@ impl Server {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    println!("new connection received");
+                    trace!("New connection received");
                     let _ = eloop_tx.send(stream);
                 }
                 Err(e) => {
-                    println!("error receiving connection: {}", e);
+                    warn!("Error encountered during TCP connection: {}", e);
                 }
             }
         }
@@ -116,23 +116,23 @@ impl Server {
 
     /// Registers the function to execute when data is received
     pub fn on_data_received(&mut self, execute: EventFunctionPtr) {
-        println!("Rust.server.on_data_received");
+        trace!("registering on_data_received handler");
         self.fp_wrapper = Arc::new(FpWrapper::new(execute));
     }
 
     /// Starts the server listening to the event loop
     pub fn begin(&mut self) {
-        println!("Rust.Server.begin");
+        trace!("server begin");
         let mut r_pool = ResourcePool::new();
         loop {
             match self.data_rx.recv() {
                 Ok((sockets, socket, buff)) => {
-                    println!("Rust.Server.begin.data_rx.recv.Ok()");
+                    trace!("data received, sending to resource pool");
                     let fp_wrapper = self.fp_wrapper.clone();
                     r_pool.run(fp_wrapper, sockets, socket, buff);
                 }
                 Err(e) => {
-                    println!("Rust.Server.begin.data_rx.recv.Err(): {}", e);
+                    error!("Err(e) hit on event loop Receiver: {}", e);
                     break;
                 }
             };
@@ -142,6 +142,6 @@ impl Server {
     /// Default execute function
     #[allow(unused_variables)]
     fn default_execute(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
-        println!("Default function executed")
+        debug!("default data handler executed...?");
     }
 }

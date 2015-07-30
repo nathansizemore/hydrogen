@@ -22,6 +22,9 @@ gcc = "*"
 libc = "*"
 rand = "*"
 num_cpus = "*"
+fern = "*"
+log = "*"
+time = "*"
 
 # From git
 [dependencies.epoll]
