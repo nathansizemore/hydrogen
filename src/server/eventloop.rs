@@ -261,7 +261,7 @@ impl EventLoop {
         }
 
         // Remove any errd sockets from the master list of sockets
-        //EventLoop::remove_socket_from_list(errd_socket_ids, s_list_clone);
+        EventLoop::remove_socket_from_list(errd_socket_ids, &mut s_list);
     }
 
     /// Removes socket from the epoll watch list
@@ -297,7 +297,7 @@ impl EventLoop {
     }
 
     /// Removes socket from master list
-    fn remove_socket_from_list(socket_ids: Vec<u32>, sockets: SocketList) {
+    fn remove_socket_from_list(socket_ids: Vec<u32>, sockets: &mut LinkedList<Socket>) {
         println!("remove_socket_from_list");
 
         // TODO - Replace with recoverable version once into_inner() is stable
@@ -307,13 +307,13 @@ impl EventLoop {
         //     Ok(guard) => guard,
         //     Err(poisoned) => poisoned.into_inner()
         // };
-        let mut s_guard = sockets.lock().unwrap();
-        let s_list = s_guard.deref_mut();
+        // let mut s_guard = sockets.lock().unwrap();
+        // let s_list = s_guard.deref_mut();
 
         for socket_id in socket_ids.iter() {
             let mut socket_found = false;
             let mut index: usize = 1;
-            for socket in s_list.iter() {
+            for socket in sockets.iter() {
                 if socket.id() == *socket_id {
                     socket_found = true;
                     break;
