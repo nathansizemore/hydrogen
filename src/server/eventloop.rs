@@ -110,7 +110,7 @@ impl EventLoop {
                     // Add to epoll
                     let event = Box::new(EpollEvent {
                         data: s_fd as u64,
-                        events: (event_type::EPOLLIN | event_type::EPOLLET)
+                        events: (event_type::EPOLLIN | event_type::EPOLLET | event_type::EPOLLRDHUP)
                     });
                     match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, event) {
                         Ok(()) => println!("New socket added to epoll list"),
