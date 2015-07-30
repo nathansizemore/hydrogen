@@ -111,10 +111,10 @@ impl EventLoop {
                     let event = Box::new(EpollEvent {
                         data: s_fd as u64,
                         events: (event_type::EPOLLIN | event_type::EPOLLET)
-                        });
+                    });
                     match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, event) {
                         Ok(()) => println!("New socket added to epoll list"),
-                        Err(e) => println!("Epoll CtrlError: {}", e)
+                        Err(e) => println!("Epoll CtrlError during add: {}", e)
                     };
                 }
                 Err(e) => {
@@ -149,7 +149,10 @@ impl EventLoop {
                     for x in 0..num_events {
                         let tx_clone = uspace_tx.clone();
                         let s_clone = sockets.clone();
-                        EventLoop::handle_epoll_event(tx_clone, &events[x as usize], s_clone);
+                        let epfd_clone = epoll_instance.clone();
+
+                        EventLoop::handle_epoll_event(epfd_clone,
+                            &events[x as usize], s_clone, tx_clone);
                     }
                 }
                 Err(e) => {
@@ -191,9 +194,10 @@ impl EventLoop {
     /// the fd instead of an O(n) lookup for every event. Currently lookup time is
     /// O(n) * MAX_EPOLL_EVENTS, where MAX_EPOLL_EVENTS is user defined in this function's
     /// caller.
-    fn handle_epoll_event(uspace_tx: Sender<EventTuple>,
+    fn handle_epoll_event(epoll_instance: RawFd,
                           event: &EpollEvent,
-                          sockets: SocketList) {
+                          sockets: SocketList,
+                          uspace_tx: Sender<EventTuple>) {
 
         println!("Rust.EventLoop.handle_epoll_event");
 
@@ -238,9 +242,74 @@ impl EventLoop {
                     }
                     Err(e) => {
                         println!("Rust.EventLoop.handle_epoll_event.socket.read.Err(e): {}", e);
+                        // We really don't care what happened, it all results in the same
+                        // outcome - remove the socket from system...
+                        let s_clone = socket.clone();
+                        let epfd_clone = epoll_instance.clone();
+                        EventLoop::remove_socket_from_epoll(s_clone, epfd_clone);
+
+                        let s_id = socket.id();
+                        let list_clone = s_list_clone.clone();
+                        EventLoop::remove_socket_from_list(s_id, list_clone);
                     }
                 }
             }
         }
+    }
+
+    /// Removes socket from the epoll watch list
+    fn remove_socket_from_epoll(socket: Socket, epoll_instance: RawFd) {
+        // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
+        // a non-null pointer in event, even though this argument is ignored.
+        // Since Linux 2.6.9, event can be specified as NULL when using
+        // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
+        // before 2.6.9 should specify a non-null pointer in event.
+        let event = Box::new(EpollEvent {
+            data: 0 as u32,
+            events: 0 as u32
+        });
+        let s_fd = socket.raw_fd();
+        match epoll::ctl(epoll_instance, ctl_op::DEL, s_fd, event) {
+            Ok(()) => println!("Socket removed from epoll watch list"),
+            Err(e) => println!("Epoll CtrlError during del: {}", e)
+        };
+    }
+
+    /// Removes socket from master list
+    fn remove_socket_from_list(socket_id: u32, sockets: SocketList) {
+        // TODO - Replace with recoverable version once into_inner() is stable
+        // Unfortunately, this is the only stable way to use mutexes at the moment
+        // Hopefully recovering from poisoning will be in 1.2
+        // let mut s_guard = match sockets.lock() {
+        //     Ok(guard) => guard,
+        //     Err(poisoned) => poisoned.into_inner()
+        // };
+        let mut s_guard = sockets.lock().unwrap();
+        let s_list = s_guard.deref_mut();
+
+        let mut socket_found = false;
+        let mut index: usize = 1;
+        for socket in s_list.iter() {
+            if socket.id() == socket_id {
+                socket_found = true;
+                break;
+            }
+            index += 1;
+        }
+
+        if !socket_found {
+            println!("Socket not found in list...?");
+            return;
+        }
+
+        if index == 1 {
+            s_list.pop_front();
+        } else {
+            let mut split = s_list.split_off(index - 1);
+            split.pop_front();
+            s_list.append(&mut split);
+        }
+
+        println!("Socket removed sucessfully");
     }
 }
