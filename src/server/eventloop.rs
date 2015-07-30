@@ -259,6 +259,8 @@ impl EventLoop {
 
     /// Removes socket from the epoll watch list
     fn remove_socket_from_epoll(socket: Socket, epoll_instance: RawFd) {
+        println!("remove_socket_from_epoll");
+
         // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
         // a non-null pointer in event, even though this argument is ignored.
         // Since Linux 2.6.9, event can be specified as NULL when using
@@ -269,14 +271,28 @@ impl EventLoop {
             events: 0 as u32
         });
         let s_fd = socket.raw_fd();
+
+        // Depending on how fd are duplicated with .clone(), this may fail
+        // If the failure case is CtlError::ENOENT, we do not care, because
+        // epoll will clean the up the descriptor after they are all dropped from
+        // program memory
         match epoll::ctl(epoll_instance, ctl_op::DEL, s_fd, event) {
             Ok(()) => println!("Socket removed from epoll watch list"),
-            Err(e) => println!("Epoll CtrlError during del: {}", e)
+            Err(e) => {
+                match e {
+                    CtlError::ENOENT => {
+                        println!("Fd not found in epoll, will remove when fd is syscall closed");
+                    }
+                    _ => println!("Epoll CtrlError during del: {}", e)
+                }
+            }
         };
     }
 
     /// Removes socket from master list
     fn remove_socket_from_list(socket_id: u32, sockets: SocketList) {
+        println!("remove_socket_from_list");
+
         // TODO - Replace with recoverable version once into_inner() is stable
         // Unfortunately, this is the only stable way to use mutexes at the moment
         // Hopefully recovering from poisoning will be in 1.2
