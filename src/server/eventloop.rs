@@ -222,7 +222,7 @@ impl EventLoop {
         //     Err(poisoned) => poisoned.into_inner()
         // };
         let mut s_guard = sockets.lock().unwrap();
-        let s_list = s_guard.deref_mut();
+        let mut s_list = s_guard.deref_mut();
         for socket in s_list.iter_mut() {
             if socket.raw_fd() as u64 == fd {
                 // We've found the socket for the event passed from epoll
