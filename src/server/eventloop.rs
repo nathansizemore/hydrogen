@@ -260,7 +260,7 @@ impl EventLoop {
         }
 
         // Remove any errd sockets from the master list of sockets
-        EventLoop::remove_socket_from_list(errd_socket_ids, list_clone);
+        EventLoop::remove_socket_from_list(errd_socket_ids, s_list_clone);
     }
 
     /// Removes socket from the epoll watch list
