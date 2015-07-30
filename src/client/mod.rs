@@ -120,14 +120,8 @@ pub extern "C" fn start(address: *const c_char,
 #[no_mangle]
 pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
                                  buffer: *const c_char,
-                                 count: c_int,
                                  k_tx: *mut Sender<()>) -> c_int {
     println!("Rust.send_to_writer");
-
-    if count < 1 {
-        println!("Error - count must be greater than zero");
-        return -1 as c_int;
-    }
 
     let mut buf_as_cstr;
     unsafe {

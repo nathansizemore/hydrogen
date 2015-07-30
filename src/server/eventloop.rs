@@ -300,16 +300,6 @@ impl EventLoop {
     fn remove_socket_from_list(socket_ids: Vec<u32>, sockets: &mut LinkedList<Socket>) {
         println!("remove_socket_from_list");
 
-        // TODO - Replace with recoverable version once into_inner() is stable
-        // Unfortunately, this is the only stable way to use mutexes at the moment
-        // Hopefully recovering from poisoning will be in 1.2
-        // let mut s_guard = match sockets.lock() {
-        //     Ok(guard) => guard,
-        //     Err(poisoned) => poisoned.into_inner()
-        // };
-        // let mut s_guard = sockets.lock().unwrap();
-        // let s_list = s_guard.deref_mut();
-
         for socket_id in socket_ids.iter() {
             let mut socket_found = false;
             let mut index: usize = 1;

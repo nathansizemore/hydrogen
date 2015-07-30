@@ -16,7 +16,7 @@
 
 
 // Rust function prototypes
-int send_to_writer(void *w_tx, const char *buffer, const int count, void *k_tx);
+int send_to_writer(void *w_tx, const char *buffer, void *k_tx);
 
 
 // Writer Sender<T> given to us from Rust
@@ -57,7 +57,7 @@ extern int nate_send(const char *buffer, const int length)
     }
 
     int result = -99;
-    result = send_to_writer(write_tx, buffer, length, stop_tx);
+    result = send_to_writer(write_tx, buffer, stop_tx);
     printf("%s%d\n", "C.send - result: ", result);
 
     return result;
