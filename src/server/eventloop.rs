@@ -313,7 +313,7 @@ impl EventLoop {
             let mut socket_found = false;
             let mut index: usize = 1;
             for socket in s_list.iter() {
-                if socket.id() == socket_id {
+                if socket.id() == *socket_id {
                     socket_found = true;
                     break;
                 }
