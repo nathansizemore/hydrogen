@@ -265,7 +265,7 @@ impl EventLoop {
         // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
         // before 2.6.9 should specify a non-null pointer in event.
         let event = Box::new(EpollEvent {
-            data: 0 as u32,
+            data: 0 as u64,
             events: 0 as u32
         });
         let s_fd = socket.raw_fd();
