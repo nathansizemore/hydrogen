@@ -207,3 +207,9 @@ fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream, kill_tx: Sender<()>) {
     debug!("Rust.writer_thread finished");
     let _ = kill_tx.send(());
 }
+
+/// Drops the current connection and kills all current threads
+#[no_mangle]
+pub extern "C" fn kill_client(k_tx: *mut Sender<()>) {
+    unsafe { let _ = (*k_tx).send(()); }
+}

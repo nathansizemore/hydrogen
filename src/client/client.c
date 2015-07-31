@@ -17,6 +17,7 @@
 
 // Rust function prototypes
 int send_to_writer(void *w_tx, const char *buffer, void *k_tx);
+void kill_client(void *k_tx);
 
 
 // Writer Sender<T> given to us from Rust
@@ -30,7 +31,7 @@ void *stop_tx;
 // thread there is a message to send
 extern void register_writer_tx(void *tx)
 {
-    printf("%s\n", "C.register_writer_tx");
+    printf("%s\n", "registering writer channel");
     write_tx = tx;
 }
 
@@ -38,27 +39,18 @@ extern void register_writer_tx(void *tx)
 // to disconnect and exit
 extern void register_stop_tx(void *tx)
 {
-    printf("%s\n", "C.register_stop_tx");
+    printf("%s\n", "registering kill channel");
     stop_tx = tx;
 }
 
-extern int nate_send(const char *buffer, const int length)
+// Sends buffer to Rust
+extern int nate_send(const char *buffer)
 {
-    //printf("%s\n", "C.nate_send");
+    return send_to_writer(write_tx, buffer, stop_tx);
+}
 
-    if (buffer)
-    {
-        //printf("%s%s\n", "buffer: ", buffer);
-    }
-    else
-    {
-        printf("%s\n", "buffer was null...?");
-        return -1;
-    }
-
-    int result = -99;
-    result = send_to_writer(write_tx, buffer, stop_tx);
-    //printf("%s%d\n", "C.send - result: ", result);
-
-    return result;
+// Informs Rust something went wrong and to stop the client
+extern void drop()
+{
+    kill_client(stop_tx);
 }
