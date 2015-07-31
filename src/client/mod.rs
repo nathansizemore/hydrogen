@@ -38,21 +38,21 @@ pub extern "C" fn start(address: *const c_char,
     // TODO - adjust this to accept a log level adjustable by whoever is running
     // the application
     super::init();
-    //
-    // trace!("Rust - start()");
-    //
-    // let mut r_address;
-    // unsafe {
-    //     r_address = CStr::from_ptr(address);
-    // }
-    // let s_address = r_address.to_bytes();
-    // let host_address = match str::from_utf8(s_address) {
-    //     Ok(safe_str) => safe_str,
-    //     Err(_) => {
-    //         error!("Invalid host address");
-    //         return -1 as c_int;
-    //     }
-    // };
+    
+    trace!("Rust - start()");
+
+    let mut r_address;
+    unsafe {
+        r_address = CStr::from_ptr(address);
+    }
+    let s_address = r_address.to_bytes();
+    let host_address = match str::from_utf8(s_address) {
+        Ok(safe_str) => safe_str,
+        Err(_) => {
+            error!("Invalid host address");
+            return -1 as c_int;
+        }
+    };
     //
     // // Create and register a way to kill this client
     // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
