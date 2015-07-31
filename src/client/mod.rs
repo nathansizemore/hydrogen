@@ -196,6 +196,6 @@ fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream) {
 
 /// Drops the current connection and kills all current threads
 #[no_mangle]
-pub extern "C" fn kill() {
+pub extern "C" fn hydrogen_kill() {
     unsafe { let _ = (*kill_tx).send(()); }
 }
