@@ -59,49 +59,49 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
     unsafe { kill_tx = &mut k_tx.clone(); }
 
-    // // Writer thread's channel
-    // let (w_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-    // unsafe { *writer_tx = w_tx.clone(); }
-    //
-    // debug!("Attempting connect to: {}", host_address);
-    //
-    // let result = TcpStream::connect(host_address);
-    // if result.is_err() {
-    //     error!("Error connecting to {} - {}", host_address, result.unwrap_err());
-    //     return -1 as c_int;
-    // }
-    // debug!("Connected");
-    // on_connect_handler();
-    //
-    // let stream = result.unwrap();
-    // let client = Bstream::new(stream);
-    // let r_client = client.clone();
-    // let w_client = client.clone();
-    //
-    // // Start the reader thread
-    // thread::Builder::new()
-    //     .name("ReaderThread".to_string())
-    //     .spawn(move||{
-    //         reader_thread(r_client, data_handler)
-    //     }).unwrap();
-    //
-    // // Start the writer thread
-    // thread::Builder::new()
-    //     .name("WriterThread".to_string())
-    //     .spawn(move||{
-    //         writer_thread(writer_rx, w_client)
-    //     }).unwrap();
-    //
-    // // Wait for the kill signal
-    // match kill_rx.recv() {
-    //     Ok(_) => { }
-    //     Err(e) => {
-    //         error!("Error on kill channel: {}", e);
-    //         on_disconnect_handler();
-    //         return -1 as c_int;
-    //     }
-    // };
-    // on_disconnect_handler();
+    // Writer thread's channel
+    let (w_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    unsafe { writer_tx = &mut w_tx.clone(); }
+
+    debug!("Attempting connect to: {}", host_address);
+
+    let result = TcpStream::connect(host_address);
+    if result.is_err() {
+        error!("Error connecting to {} - {}", host_address, result.unwrap_err());
+        return -1 as c_int;
+    }
+    debug!("Connected");
+    on_connect_handler();
+
+    let stream = result.unwrap();
+    let client = Bstream::new(stream);
+    let r_client = client.clone();
+    let w_client = client.clone();
+
+    // Start the reader thread
+    thread::Builder::new()
+        .name("ReaderThread".to_string())
+        .spawn(move||{
+            reader_thread(r_client, data_handler)
+        }).unwrap();
+
+    // Start the writer thread
+    thread::Builder::new()
+        .name("WriterThread".to_string())
+        .spawn(move||{
+            writer_thread(writer_rx, w_client)
+        }).unwrap();
+
+    // Wait for the kill signal
+    match kill_rx.recv() {
+        Ok(_) => { }
+        Err(e) => {
+            error!("Error on kill channel: {}", e);
+            on_disconnect_handler();
+            return -1 as c_int;
+        }
+    };
+    on_disconnect_handler();
 
     // Exit out in standard C fashion
     0 as c_int
