@@ -30,7 +30,7 @@ static mut kill_tx: *mut Sender<()> = 0 as *mut Sender<()>;
 
 
 #[no_mangle]
-pub extern "C" fn start(address: *const c_char,
+pub extern "C" fn hydrogen_start(address: *const c_char,
     data_handler: extern fn(*const c_char),
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
@@ -38,7 +38,7 @@ pub extern "C" fn start(address: *const c_char,
     // TODO - adjust this to accept a log level adjustable by whoever is running
     // the application
     super::init();
-    
+
     trace!("Rust - start()");
 
     let mut r_address;
@@ -53,11 +53,12 @@ pub extern "C" fn start(address: *const c_char,
             return -1 as c_int;
         }
     };
-    //
-    // // Create and register a way to kill this client
-    // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    // unsafe { *kill_tx = k_tx.clone(); }
-    //
+    trace!("Address: ");
+
+    // Create and register a way to kill this client
+    let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    unsafe { *kill_tx = k_tx.clone(); }
+
     // // Writer thread's channel
     // let (w_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
     // unsafe { *writer_tx = w_tx.clone(); }
