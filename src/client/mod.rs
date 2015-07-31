@@ -39,7 +39,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     // the application
     super::init();
 
-    println!("Test from Rust");
+    println!("Rust - stdout test...");
 
     trace!("Rust - start()");
 
@@ -55,7 +55,6 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
             return -1 as c_int;
         }
     };
-    trace!("Address: ");
 
     // Create and register a way to kill this client
     let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
