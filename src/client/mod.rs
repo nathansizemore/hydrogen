@@ -37,7 +37,7 @@ pub extern "C" fn start(address: *const c_char,
 
     // TODO - adjust this to accept a log level adjustable by whoever is running
     // the application
-    // super::init();
+    super::init();
     //
     // trace!("Rust - start()");
     //
