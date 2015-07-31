@@ -31,7 +31,7 @@ static mut kill_tx: *mut Sender<()> = 0 as *mut Sender<()>;
 
 #[no_mangle]
 pub extern "C" fn start(address: *const c_char,
-    data_handler: extern fn(*const c_char, c_int),
+    data_handler: extern fn(*const c_char),
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
@@ -139,7 +139,7 @@ pub extern "C" fn write(buffer: *const c_char) -> c_int {
 
 /// Forever listens to incoming data and when a complete message is received,
 /// the passed callback is hit
-fn reader_thread(client: Bstream, handler: extern fn(*const c_char, c_int)) {
+fn reader_thread(client: Bstream, handler: extern fn(*const c_char)) {
     trace!("Rust.reader_thread started");
 
     let mut reader = client.clone();
@@ -152,7 +152,7 @@ fn reader_thread(client: Bstream, handler: extern fn(*const c_char, c_int)) {
                     .spawn(move||{
                         let slice = &buffer[..];
                         let c_buffer = CString::new(slice).unwrap();
-                        handler(c_buffer.as_ptr(), buffer.len() as c_int);
+                        handler(c_buffer.as_ptr());
                     }).unwrap();
             }
             Err(e) => {
