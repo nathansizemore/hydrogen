@@ -22,11 +22,12 @@ use super::libc::{c_int, c_char};
 use super::simple_stream::bstream::Bstream;
 
 
-#[link(name = "client", kind = "static")]
-extern {
-    fn register_writer_tx(tx: *mut Sender<Vec<u8>>);
-    fn register_stop_tx(tx: *mut Sender<()>);
-}
+/// This client's writer channel
+static mut writer_tx: *mut Sender<Vec<u8>> = 0 as *mut Sender<Vec<u8>>;
+
+/// This client's kill channel
+static mut kill_tx: *mut Sender<()> = 0 as *mut Sender<()>;
+
 
 #[no_mangle]
 pub extern "C" fn start(address: *const c_char,
@@ -34,6 +35,8 @@ pub extern "C" fn start(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
+    // TODO - adjust this to accept a log level adjustable by whoever is running
+    // the application
     super::init();
 
     trace!("Rust - start()");
@@ -51,24 +54,13 @@ pub extern "C" fn start(address: *const c_char,
         }
     };
 
-    trace!("Rust - address: {}", host_address);
-
     // Create and register a way to kill this client
     let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    let kill_tx = k_tx.clone();
-    let mut k_tx_ptr = Box::new(k_tx);
-
-    trace!("calling register_stop_tx");
-    unsafe {
-        register_stop_tx(&mut *k_tx_ptr);
-    }
+    unsafe { *kill_tx = k_tx.clone(); }
 
     // Writer thread's channel
-    let (w_tx, w_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-    let mut w_tx_ptr = Box::new(w_tx);
-    unsafe {
-        register_writer_tx(&mut *w_tx_ptr);
-    }
+    let (w_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    unsafe { *writer_tx = w_tx.clone(); }
 
     debug!("Attempting connect to: {}", host_address);
 
@@ -82,25 +74,21 @@ pub extern "C" fn start(address: *const c_char,
 
     let stream = result.unwrap();
     let client = Bstream::new(stream);
-
     let r_client = client.clone();
-    let r_kill_tx = kill_tx.clone();
-
     let w_client = client.clone();
-    let w_kill_tx = kill_tx.clone();
 
     // Start the reader thread
     thread::Builder::new()
         .name("ReaderThread".to_string())
         .spawn(move||{
-            reader_thread(r_client, data_handler, r_kill_tx)
+            reader_thread(r_client, data_handler)
         }).unwrap();
 
     // Start the writer thread
     thread::Builder::new()
         .name("WriterThread".to_string())
         .spawn(move||{
-            writer_thread(w_rx, w_client, w_kill_tx)
+            writer_thread(writer_rx, w_client)
         }).unwrap();
 
     // Wait for the kill signal
@@ -108,6 +96,7 @@ pub extern "C" fn start(address: *const c_char,
         Ok(_) => { }
         Err(e) => {
             error!("Error on kill channel: {}", e);
+            on_disconnect_handler();
             return -1 as c_int;
         }
     };
@@ -120,10 +109,8 @@ pub extern "C" fn start(address: *const c_char,
 /// Writes the complete contents of buffer to the server
 /// Returns -1 on error
 #[no_mangle]
-pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
-                                 buffer: *const c_char,
-                                 k_tx: *mut Sender<()>) -> c_int {
-    trace!("Rust.send_to_writer");
+pub extern "C" fn write(buffer: *const c_char) -> c_int {
+    trace!("Rust.write");
 
     let mut buf_as_cstr;
     unsafe {
@@ -137,11 +124,11 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
     }
 
     unsafe {
-        match (*w_tx).send(n_buffer) {
+        match (*writer_tx).send(n_buffer) {
             Ok(_) => { }
             Err(e) => {
                 warn!("Error sending buffer: {}", e);
-                let _ = (*k_tx).send(());
+                let _ = (*kill_tx).send(());
                 return -1 as c_int;
             }
         };
@@ -152,9 +139,7 @@ pub extern "C" fn send_to_writer(w_tx: *mut Sender<Vec<u8>>,
 
 /// Forever listens to incoming data and when a complete message is received,
 /// the passed callback is hit
-fn reader_thread(client: Bstream,
-                 event_handler: extern fn(*const c_char, c_int),
-                 kill_tx: Sender<()>) {
+fn reader_thread(client: Bstream, handler: extern fn(*const c_char, c_int)) {
     trace!("Rust.reader_thread started");
 
     let mut reader = client.clone();
@@ -167,7 +152,7 @@ fn reader_thread(client: Bstream,
                     .spawn(move||{
                         let slice = &buffer[..];
                         let c_buffer = CString::new(slice).unwrap();
-                        event_handler(c_buffer.as_ptr(), buffer.len() as c_int);
+                        handler(c_buffer.as_ptr(), buffer.len() as c_int);
                     }).unwrap();
             }
             Err(e) => {
@@ -177,12 +162,12 @@ fn reader_thread(client: Bstream,
         };
     }
     debug!("Rust.reader_thread finished");
-    let _ = kill_tx.send(());
+    unsafe { let _ = (*kill_tx).send(()); }
 }
 
 /// Forever listens to Receiver<Vec<u8>> waiting on messages to come in
 /// Once available, blocks until the entire message has been written
-fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream, kill_tx: Sender<()>) {
+fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream) {
     trace!("Rust.writer_thread started");
 
     let mut writer = client.clone();
@@ -205,11 +190,11 @@ fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream, kill_tx: Sender<()>) {
     }
 
     debug!("Rust.writer_thread finished");
-    let _ = kill_tx.send(());
+    unsafe { let _ = (*kill_tx).send(()); }
 }
 
 /// Drops the current connection and kills all current threads
 #[no_mangle]
-pub extern "C" fn kill_client(k_tx: *mut Sender<()>) {
-    unsafe { let _ = (*k_tx).send(()); }
+pub extern "C" fn kill() {
+    unsafe { let _ = (*kill_tx).send(()); }
 }
