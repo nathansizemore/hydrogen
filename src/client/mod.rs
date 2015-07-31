@@ -39,6 +39,8 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     // the application
     super::init();
 
+    println!("Test from Rust");
+
     trace!("Rust - start()");
 
     let mut r_address;
