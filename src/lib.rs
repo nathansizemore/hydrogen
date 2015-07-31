@@ -31,7 +31,8 @@ pub mod server;
 
 
 /// Initializes all the global things
-pub fn init() {
+#[no_mangle]
+pub extern "C" fn hydrogen_init() {
     println!("Hydrogen initializing...");
 
     let _ = fern::init_global_logger(fern::DispatchConfig {
@@ -41,6 +42,6 @@ pub fn init() {
         output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
         level: log::LogLevelFilter::Trace,
     }, log::LogLevelFilter::Trace);
-    
+
     trace!("Logger initialized :)");
 }

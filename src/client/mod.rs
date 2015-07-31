@@ -35,12 +35,6 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
-    // TODO - adjust this to accept a log level adjustable by whoever is running
-    // the application
-    super::init();
-
-    println!("Rust - stdout test...");
-
     trace!("Rust - start()");
 
     let mut r_address;
