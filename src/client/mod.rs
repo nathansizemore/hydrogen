@@ -37,70 +37,70 @@ pub extern "C" fn start(address: *const c_char,
 
     // TODO - adjust this to accept a log level adjustable by whoever is running
     // the application
-    super::init();
-
-    trace!("Rust - start()");
-
-    let mut r_address;
-    unsafe {
-        r_address = CStr::from_ptr(address);
-    }
-    let s_address = r_address.to_bytes();
-    let host_address = match str::from_utf8(s_address) {
-        Ok(safe_str) => safe_str,
-        Err(_) => {
-            error!("Invalid host address");
-            return -1 as c_int;
-        }
-    };
-
-    // Create and register a way to kill this client
-    let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    unsafe { *kill_tx = k_tx.clone(); }
-
-    // Writer thread's channel
-    let (w_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
-    unsafe { *writer_tx = w_tx.clone(); }
-
-    debug!("Attempting connect to: {}", host_address);
-
-    let result = TcpStream::connect(host_address);
-    if result.is_err() {
-        error!("Error connecting to {} - {}", host_address, result.unwrap_err());
-        return -1 as c_int;
-    }
-    debug!("Connected");
-    on_connect_handler();
-
-    let stream = result.unwrap();
-    let client = Bstream::new(stream);
-    let r_client = client.clone();
-    let w_client = client.clone();
-
-    // Start the reader thread
-    thread::Builder::new()
-        .name("ReaderThread".to_string())
-        .spawn(move||{
-            reader_thread(r_client, data_handler)
-        }).unwrap();
-
-    // Start the writer thread
-    thread::Builder::new()
-        .name("WriterThread".to_string())
-        .spawn(move||{
-            writer_thread(writer_rx, w_client)
-        }).unwrap();
-
-    // Wait for the kill signal
-    match kill_rx.recv() {
-        Ok(_) => { }
-        Err(e) => {
-            error!("Error on kill channel: {}", e);
-            on_disconnect_handler();
-            return -1 as c_int;
-        }
-    };
-    on_disconnect_handler();
+    // super::init();
+    //
+    // trace!("Rust - start()");
+    //
+    // let mut r_address;
+    // unsafe {
+    //     r_address = CStr::from_ptr(address);
+    // }
+    // let s_address = r_address.to_bytes();
+    // let host_address = match str::from_utf8(s_address) {
+    //     Ok(safe_str) => safe_str,
+    //     Err(_) => {
+    //         error!("Invalid host address");
+    //         return -1 as c_int;
+    //     }
+    // };
+    //
+    // // Create and register a way to kill this client
+    // let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
+    // unsafe { *kill_tx = k_tx.clone(); }
+    //
+    // // Writer thread's channel
+    // let (w_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    // unsafe { *writer_tx = w_tx.clone(); }
+    //
+    // debug!("Attempting connect to: {}", host_address);
+    //
+    // let result = TcpStream::connect(host_address);
+    // if result.is_err() {
+    //     error!("Error connecting to {} - {}", host_address, result.unwrap_err());
+    //     return -1 as c_int;
+    // }
+    // debug!("Connected");
+    // on_connect_handler();
+    //
+    // let stream = result.unwrap();
+    // let client = Bstream::new(stream);
+    // let r_client = client.clone();
+    // let w_client = client.clone();
+    //
+    // // Start the reader thread
+    // thread::Builder::new()
+    //     .name("ReaderThread".to_string())
+    //     .spawn(move||{
+    //         reader_thread(r_client, data_handler)
+    //     }).unwrap();
+    //
+    // // Start the writer thread
+    // thread::Builder::new()
+    //     .name("WriterThread".to_string())
+    //     .spawn(move||{
+    //         writer_thread(writer_rx, w_client)
+    //     }).unwrap();
+    //
+    // // Wait for the kill signal
+    // match kill_rx.recv() {
+    //     Ok(_) => { }
+    //     Err(e) => {
+    //         error!("Error on kill channel: {}", e);
+    //         on_disconnect_handler();
+    //         return -1 as c_int;
+    //     }
+    // };
+    // on_disconnect_handler();
 
     // Exit out in standard C fashion
     0 as c_int
