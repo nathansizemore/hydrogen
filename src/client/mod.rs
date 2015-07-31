@@ -109,7 +109,7 @@ pub extern "C" fn start(address: *const c_char,
 /// Writes the complete contents of buffer to the server
 /// Returns -1 on error
 #[no_mangle]
-pub extern "C" fn write(buffer: *const c_char) -> c_int {
+pub extern "C" fn hydrogen_write(buffer: *const c_char) -> c_int {
     trace!("Rust.write");
 
     let mut buf_as_cstr;
