@@ -57,7 +57,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
 
     // Create and register a way to kill this client
     let (k_tx, kill_rx): (Sender<()>, Receiver<()>) = channel();
-    unsafe { *kill_tx = k_tx.clone(); }
+    unsafe { kill_tx = &mut k_tx.clone(); }
 
     // // Writer thread's channel
     // let (w_tx, writer_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
