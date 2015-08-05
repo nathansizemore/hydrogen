@@ -47,7 +47,8 @@ impl ResourcePool {
         // panic and thow out an error message to indicate we need more POWER!!
         let num = num_cpus::get();
         if num < 4 {
-            panic!("ERROR: Need at least 4 cpus")
+            error!("Need a minimum of 4 CPUs to run");
+            panic!()
         }
 
         // Initialize woker threads
@@ -63,12 +64,9 @@ impl ResourcePool {
     }
 
     /// Runs the passed function
-    pub fn run(&mut self,
-        fp_wrapper: Arc<FpWrapper>,
-        sockets: SocketList,
-        socket: Socket,
-        buffer: Vec<u8>)
-    {
+    pub fn run(&mut self, fp_wrapper: Arc<FpWrapper>,
+        sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
+            
         if self.next_worker == self.w_threads.len() {
             self.next_worker = 0;
         }
