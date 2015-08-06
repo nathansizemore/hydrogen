@@ -109,11 +109,11 @@ impl EventLoop {
                     s_list.push_back(socket);
 
                     // Add to epoll
-                    let event = Box::new(EpollEvent {
+                    let mut event = EpollEvent {
                         data: s_fd as u64,
                         events: (event_type::EPOLLIN | event_type::EPOLLET | event_type::EPOLLRDHUP)
-                    });
-                    match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, event) {
+                    };
+                    match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, &mut event) {
                         Ok(()) => trace!("New socket added to epoll list"),
                         Err(e) => warn!("Epoll CtrlError during add: {}", e)
                     };
@@ -272,17 +272,17 @@ impl EventLoop {
         // Since Linux 2.6.9, event can be specified as NULL when using
         // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
         // before 2.6.9 should specify a non-null pointer in event.
-        let event = Box::new(EpollEvent {
+        let mut event = EpollEvent {
             data: 0 as u64,
             events: 0 as u32
-        });
+        };
         let s_fd = socket.raw_fd();
 
         // Depending on how fd are duplicated with .clone(), this may fail
         // If the failure case is CtlError::ENOENT, we do not care, because
         // epoll will clean the up the descriptor after they are all dropped from
         // program memory
-        match epoll::ctl(epoll_instance, ctl_op::DEL, s_fd, event) {
+        match epoll::ctl(epoll_instance, ctl_op::DEL, s_fd, &mut event) {
             Ok(()) => trace!("Socket removed from epoll watch list"),
             Err(e) => {
                 match e {

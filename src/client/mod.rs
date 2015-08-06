@@ -45,8 +45,8 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     let host_address = match str::from_utf8(s_address) {
         Ok(safe_str) => safe_str,
         Err(_) => {
-            error!("Invalid host address");
-            return -1 as c_int;
+            error!("Invalid UTF-8");
+            return -100 as c_int;
         }
     };
 
@@ -63,7 +63,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     let result = TcpStream::connect(host_address);
     if result.is_err() {
         error!("Error connecting to {} - {}", host_address, result.unwrap_err());
-        return -1 as c_int;
+        return -101 as c_int;
     }
     debug!("Connected");
     on_connect_handler();
@@ -92,8 +92,6 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
         Ok(_) => { }
         Err(e) => {
             error!("Error on kill channel: {}", e);
-            on_disconnect_handler();
-            return -1 as c_int;
         }
     };
     on_disconnect_handler();
