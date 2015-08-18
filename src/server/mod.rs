@@ -12,17 +12,14 @@
 // the Mozilla Public License, v. 2.0.
 
 
-extern crate rand;
-extern crate epoll;
-extern crate simple_stream;
-extern crate num_cpus;
-
 
 use std::thread;
 use std::thread::JoinHandle;
 use std::sync::Arc;
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Sender, Receiver};
+
+pub use super::rustc_serialize::*;
 
 use self::types::*;
 use self::socket::Socket;
@@ -31,6 +28,7 @@ use self::resources::ResourcePool;
 
 pub mod types;
 pub mod socket;
+pub mod stats;
 
 mod eventloop;
 mod resources;

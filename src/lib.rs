@@ -21,11 +21,12 @@ extern crate libc;
 extern crate rand;
 extern crate simple_stream;
 extern crate num_cpus;
-#[cfg(target_os = "linux")]
+//#[cfg(target_os = "linux")]
 extern crate epoll;
+extern crate rustc_serialize;
 
 pub mod client;
-#[cfg(target_os = "linux")]
+//#[cfg(target_os = "linux")]
 pub mod server;
 
 

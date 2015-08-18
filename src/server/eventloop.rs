@@ -26,12 +26,15 @@ use std::sync::mpsc::{
     TryRecvError
 };
 
-use super::types::*;
-use super::epoll;
-use super::epoll::util::*;
-use super::epoll::EpollEvent;
-use super::socket::Socket;
-use super::simple_stream::nbetstream::NbetStream;
+use super::super::epoll;
+use super::super::epoll::util::*;
+use super::super::epoll::EpollEvent;
+use super::super::simple_stream::nbetstream::NbetStream;
+
+use server::stats;
+use server::types::*;
+use server::socket::Socket;
+
 
 #[allow(dead_code)]
 pub struct EventLoop {
@@ -84,7 +87,7 @@ impl EventLoop {
         // Start the epoll thread
         let c_sockets = sockets.clone();
         let c_epoll_instance = epoll_instance.clone();
-        let epoll_prox = thread::Builder::new()
+        thread::Builder::new()
             .name("EpollLoop".to_string())
             .spawn(move || {
                 EventLoop::epoll_loop(uspace_tx, c_sockets, c_epoll_instance, err_rx);
@@ -107,6 +110,9 @@ impl EventLoop {
                     let s_list = s_guard.deref_mut();
                     let s_fd = socket.raw_fd();
                     s_list.push_back(socket);
+
+                    // Track the new connection
+                    stats::conn_recv();
 
                     // Add to epoll
                     let mut event = EpollEvent {
@@ -158,7 +164,7 @@ impl EventLoop {
             }
 
             // If we receive anything on this end or lose communication, we need to halt,
-            // because we have no where to send up events, our "user space" channel is
+            // because we have nowhere to send up events, our "user space" channel is
             // gone
             match err_rx.try_recv() {
                 Ok(_) => {
@@ -200,7 +206,7 @@ impl EventLoop {
 
         // List of socket id's that produced an Err on read attempt
         // Cannot do it within the match block because the list will need
-        // access to the mutex, while this scope has the mutex, which will result
+        // access to the mutex while this scope has the mutex, which will result
         // in a spinlock that will spin forever. And, that's a trip to bummer town
         let mut errd_socket_ids = Vec::<u32>::new();
 
@@ -231,12 +237,12 @@ impl EventLoop {
                             match String::from_utf8(msg_for_debug) {
                                 Ok(msg_str) => debug!("msg_as_string: {}", msg_str),
                                 Err(e) => {
-                                    warn!("Error converting to UTF-8: {}", e)
                                     // TODO - Determine if all things must be valid UTF-8
                                     // Potentially, bitbanging could be used which would
                                     // produce invalid UTF-8.
                                     //
                                     // For now, it just prints a warning
+                                    warn!("Error converting to UTF-8: {}", e)
                                 }
                             };
 
@@ -244,6 +250,10 @@ impl EventLoop {
                             let socket_clone = socket.clone();
                             let msg_clone = msg.clone();
                             let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
+
+                            // Track message received event and num bytes received
+                            stats::msg_recv();
+                            stats::bytes_recv(msg.len());
                         }
                     }
                     Err(e) => {
@@ -260,7 +270,7 @@ impl EventLoop {
         }
 
         // Remove any errd sockets from the master list of sockets
-        EventLoop::remove_socket_from_list(errd_socket_ids, &mut s_list);
+        EventLoop::remove_sockets_from_list(errd_socket_ids, &mut s_list);
     }
 
     /// Removes socket from the epoll watch list
@@ -295,9 +305,9 @@ impl EventLoop {
         };
     }
 
-    /// Removes socket from master list
-    fn remove_socket_from_list(socket_ids: Vec<u32>, sockets: &mut LinkedList<Socket>) {
-        debug!("remove_socket_from_list");
+    /// Removes socket_ids from master list
+    fn remove_sockets_from_list(socket_ids: Vec<u32>, sockets: &mut LinkedList<Socket>) {
+        debug!("remove_sockets_from_list");
 
         for socket_id in socket_ids.iter() {
             let mut socket_found = false;
@@ -312,7 +322,7 @@ impl EventLoop {
 
             if !socket_found {
                 debug!("Socket not found in list...?");
-                return;
+                continue;
             }
 
             if index == 1 {
@@ -322,6 +332,9 @@ impl EventLoop {
                 split.pop_front();
                 sockets.append(&mut split);
             }
+
+            // Track the disconnect
+            stats::conn_lost();
 
             debug!("Socket removed sucessfully");
         }

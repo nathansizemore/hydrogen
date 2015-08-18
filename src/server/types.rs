@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
 use std::sync::mpsc::{Sender, Receiver};
 
-use super::socket::Socket;
+use server::socket::Socket;
 
 /// Thread safe, Arc, locked LinkedList of Sockets
 pub type SocketList = Arc<Mutex<LinkedList<Socket>>>;

@@ -17,8 +17,10 @@
 
 use std::os::unix::io::RawFd;
 
-use super::rand;
-use super::simple_stream::nbetstream::{
+use server::stats;
+
+use super::super::rand;
+use super::super::simple_stream::nbetstream::{
     NbetStream,
     ReadResult,
     WriteResult
@@ -57,7 +59,12 @@ impl Socket {
 
     /// Attempts to write to this socket
     pub fn write(&mut self, buf: &Vec<u8>) -> WriteResult {
-        self.stream.write(buf)
+        let result = self.stream.write(buf);
+        if result.is_ok() {
+            stats::msg_sent();
+            stats::bytes_sent(buf.len());
+        }
+        result
     }
 
     /// Returns the underlying file descriptor

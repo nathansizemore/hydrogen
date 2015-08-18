@@ -14,11 +14,12 @@
 
 use std::sync::Arc;
 
-use super::FpWrapper;
-use super::types::*;
-use super::socket::Socket;
-use super::num_cpus;
-use super::workerthread::WorkerThread;
+use server::FpWrapper;
+use server::types::*;
+use server::socket::Socket;
+use server::workerthread::WorkerThread;
+
+use super::super::num_cpus;
 
 
 /// Provides access to and manages worker threads
@@ -66,7 +67,7 @@ impl ResourcePool {
     /// Runs the passed function
     pub fn run(&mut self, fp_wrapper: Arc<FpWrapper>,
         sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
-            
+
         if self.next_worker == self.w_threads.len() {
             self.next_worker = 0;
         }

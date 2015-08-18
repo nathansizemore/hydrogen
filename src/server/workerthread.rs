@@ -17,9 +17,9 @@ use std::thread::JoinHandle;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-use super::types::*;
-use super::FpWrapper;
-use super::socket::Socket;
+use server::types::*;
+use server::FpWrapper;
+use server::socket::Socket;
 
 #[allow(dead_code)]
 pub struct WorkerThread {
