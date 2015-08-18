@@ -12,7 +12,7 @@
 // the Mozilla Public License, v. 2.0.
 
 
-
+use std::mem;
 use std::thread;
 use std::thread::JoinHandle;
 use std::sync::Arc;
@@ -126,7 +126,13 @@ impl Server {
             match self.data_rx.recv() {
                 Ok((sockets, socket, buff)) => {
                     trace!("data received, sending to resource pool");
-                    let fp_wrapper = self.fp_wrapper.clone();
+                    let mut fp_wrapper = self.fp_wrapper.clone();
+
+                    // Request for server statistics
+                    if buff.len() == 5 && buff[0] == 0x0D {
+                        fp_wrapper = Arc::new(FpWrapper::new(Box::new(Server::request_for_server_stats)));
+                    }
+
                     r_pool.run(fp_wrapper, sockets, socket, buff);
                 }
                 Err(e) => {
@@ -141,5 +147,27 @@ impl Server {
     #[allow(unused_variables)]
     fn default_execute(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
         debug!("default data handler executed...?");
+    }
+
+    /// Request for server stats
+    #[allow(unused_variables)]
+    fn request_for_server_stats(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
+        let mut sec_interval = 1.0f32;
+        let u8_ptr = buffer.as_ptr();
+        unsafe {
+            let f32_ptr: *const f32 = mem::transmute(u8_ptr.offset(1));
+            sec_interval = *f32_ptr;
+        }
+
+        match stats::as_serialized_buffer(sec_interval) {
+            Ok(ref mut buf) => {
+                // Yeah, this is dumb...
+                // FIXME - Find a way to accept a mutable reference to a socket, or
+                // maybe go through and make the streams implement copy?
+                let mut socket = socket.clone();
+                socket.write(buf);
+            }
+            Err(_) => { }
+        };
     }
 }

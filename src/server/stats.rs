@@ -47,6 +47,7 @@
 //!         ]
 //!     }
 //! }
+//!
 
 
 use std::str;
@@ -58,6 +59,7 @@ use std::process::Command;
 
 use super::super::time;
 use super::super::num_cpus;
+use super::super::rustc_serialize::json;
 
 
 // Global mutable state, ftw!
@@ -91,11 +93,11 @@ pub struct GeneralData {
 #[derive(RustcDecodable, RustcEncodable, Clone)]
 pub struct ResourceData {
     /// Used v Available
-    ram: Ram,
+    pub ram: Ram,
     /// Overall CPU performance
-    cpu_overall: f32,
+    pub cpu_overall: f32,
     /// Collection of cpu data per core/cpu
-    cpu_per_core: Vec<CpuData>
+    pub cpu_per_core: Vec<CpuData>
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
@@ -150,6 +152,11 @@ impl GeneralData {
             return;
         }
         self.num_clients -= 1;
+    }
+
+    /// Sets new resource data
+    pub fn set_resource_data(&mut self, new_data: ResourceData) {
+        self.resources = new_data;
     }
 }
 
@@ -342,8 +349,8 @@ pub fn msg_sent() {
     d.msg_sent += 1;
 }
 
-/// Returns the structure as a JSON serialized Vec<u8>
-pub fn as_serialized_buffer() -> Result<Vec<u8>, ()> {
+/// Returns the structure as a JSON serialized Vec<u8> with CPU data for perf_sec time
+pub fn as_serialized_buffer(perf_sec: f32) -> Result<Vec<u8>, ()> {
     // We don't need to keep a lock on the struct for this operation, so we
     // are going to clone it, release the lock, and send the cloned version
     let mut d_clone;
@@ -363,9 +370,26 @@ pub fn as_serialized_buffer() -> Result<Vec<u8>, ()> {
         d_clone = d_guard.deref().clone();
     }
 
+    // Grab CPU performance stats
+    let (overall, cores) = match cpu_usage_for_secs(perf_sec) {
+        Ok((o, c)) => (o, c),
+        Err(_) => panic!("Unable to retrieve CPU stats...?")
+    };
 
+    // Grab RAM stats
+    let ram_stats = match get_current_ram_usage() {
+        Ok(ram) => ram,
+        Err(_) => panic!("Unable to retrieve RAM stats...?")
+    };
 
-    Ok(Vec::new())
+    d_clone.resources.ram = ram_stats;
+    d_clone.resources.cpu_overall = overall;
+    d_clone.resources.cpu_per_core = cores;
+    let json_encoded = json::encode(&d_clone).unwrap();
+
+    debug!("Server stats: {}", json_encoded);
+
+    Ok(json_encoded.into_bytes())
 }
 
 /// Returns the CPU usage per core, and overall for the next sec second(s)
@@ -548,7 +572,7 @@ fn get_current_ram_usage() -> Result<Ram, ()> {
 
     // Ensure we did all the wonderful string parsing correctly
     if num_found != 4 {
-        warn!("/proc/meminfo parsed incorrectly...?");
+        error!("/proc/meminfo parsed incorrectly...?");
         return Err(());
     }
 
