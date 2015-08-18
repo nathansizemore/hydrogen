@@ -18,7 +18,7 @@ use std::thread;
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-use super::libc::{c_int, c_char};
+use super::libc::{c_int, c_char, uint8_t};
 use super::simple_stream::bstream::Bstream;
 
 
@@ -31,7 +31,7 @@ static mut kill_tx: *mut Sender<()> = 0 as *mut Sender<()>;
 
 #[no_mangle]
 pub extern "C" fn hydrogen_start(address: *const c_char,
-    data_handler: extern fn(*const c_char),
+    data_handler: extern fn(*const uint8_t),
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
@@ -103,19 +103,10 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
 /// Writes the complete contents of buffer to the server
 /// Returns -1 on error
 #[no_mangle]
-pub extern "C" fn hydrogen_write(buffer: *const c_char) -> c_int {
+pub extern "C" fn hydrogen_write(buffer: *const uint8_t, len: usize) -> c_int {
     trace!("Rust.write");
 
-    let mut buf_as_cstr;
-    unsafe {
-        buf_as_cstr = CStr::from_ptr(buffer);
-    }
-    let buf_as_slice = buf_as_cstr.to_bytes();
-
-    let mut n_buffer = Vec::<u8>::with_capacity(buf_as_slice.len());
-    for byte in buf_as_slice.iter() {
-        n_buffer.push(*byte);
-    }
+    let n_buffer = unsafe { Vec::<u8>::from_raw_parts(buffer.offset(0) as *mut u8, len, len) };
 
     unsafe {
         match (*writer_tx).send(n_buffer) {
@@ -133,7 +124,7 @@ pub extern "C" fn hydrogen_write(buffer: *const c_char) -> c_int {
 
 /// Forever listens to incoming data and when a complete message is received,
 /// the passed callback is hit
-fn reader_thread(client: Bstream, handler: extern fn(*const c_char)) {
+fn reader_thread(client: Bstream, handler: extern fn(*const uint8_t)) {
     trace!("Rust.reader_thread started");
 
     let mut reader = client.clone();
@@ -144,9 +135,7 @@ fn reader_thread(client: Bstream, handler: extern fn(*const c_char)) {
                 thread::Builder::new()
                     .name("Reader-Worker".to_string())
                     .spawn(move||{
-                        let slice = &buffer[..];
-                        let c_buffer = CString::new(slice).unwrap();
-                        handler(c_buffer.as_ptr());
+                        handler(buffer.as_ptr());
                     }).unwrap();
             }
             Err(e) => {
