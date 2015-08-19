@@ -31,7 +31,7 @@ static mut kill_tx: *mut Sender<()> = 0 as *mut Sender<()>;
 
 #[no_mangle]
 pub extern "C" fn hydrogen_start(address: *const c_char,
-    data_handler: extern fn(*const uint8_t, usize len),
+    data_handler: extern fn(*const uint8_t, len: usize),
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
@@ -124,7 +124,7 @@ pub extern "C" fn hydrogen_write(buffer: *const uint8_t, len: usize) -> c_int {
 
 /// Forever listens to incoming data and when a complete message is received,
 /// the passed callback is hit
-fn reader_thread(client: Bstream, handler: extern fn(*const uint8_t)) {
+fn reader_thread(client: Bstream, handler: extern fn(*const uint8_t, len: usize)) {
     trace!("Rust.reader_thread started");
 
     let mut reader = client.clone();
