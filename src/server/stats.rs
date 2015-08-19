@@ -25,14 +25,8 @@
 //!     "num_clients": 1234,
 //!     "resources": {
 //!         "ram": {
-//!             "kernel": {
-//!                 "bytes_used": 1234,
-//!                 "bytes_available": 1234
-//!             },
-//!             "user_space": {
-//!                 "bytes_used": 1234,
-//!                 "bytes_available": 1234
-//!             }
+//!             "bytes_used": 1234,
+//!             "bytes_available": 1234
 //!         },
 //!         "cpu_overall": .96,
 //!         "cpu_per_core": [
@@ -93,19 +87,11 @@ pub struct GeneralData {
 #[derive(RustcDecodable, RustcEncodable, Clone)]
 pub struct ResourceData {
     /// Used v Available
-    pub ram: Ram,
+    pub ram: RamData,
     /// Overall CPU performance
     pub cpu_overall: f32,
     /// Collection of cpu data per core/cpu
     pub cpu_per_core: Vec<CpuData>
-}
-
-#[derive(RustcDecodable, RustcEncodable, Clone)]
-pub struct Ram {
-    /// Kernel space
-    pub kernel: RamData,
-    /// User space
-    pub user_space: RamData
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
@@ -165,16 +151,7 @@ impl ResourceData {
     /// Returns a new ResourceData
     pub fn new() -> ResourceData {
         let mut temp = ResourceData {
-            ram: Ram {
-                kernel: RamData {
-                    bytes_used: 0u64,
-                    bytes_available: 0u64
-                },
-                user_space: RamData {
-                    bytes_used: 0u64,
-                    bytes_available: 0u64
-                }
-            },
+            ram: RamData::new(),
             cpu_overall: 0.0f32,
             cpu_per_core: Vec::new()
         };
@@ -576,10 +553,10 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
 }
 
 /// Returns a tuple of stats::Ram
-fn get_current_ram_usage() -> Result<Ram, ()> {
+fn get_current_ram_usage() -> Result<RamData, ()> {
     // Read from /proc/meminfo
     // For more info on stdout from command, see here:
-    // https://github.com/torvalds/linux/blob/master/Documentation/filesystems/proc.txt
+    // https://github.com/torvalds/linux/blob/master/Documentation/filesystems/proc.txt#L801
     let output = Command::new("cat").arg("/proc/meminfo")
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
@@ -599,54 +576,35 @@ fn get_current_ram_usage() -> Result<Ram, ()> {
     // |   Description   |    uint   |   uint's units    |
     // +-----------------+-----------+-------------------+
     let mut num_found = 0;
-    let mut high_total = 0u64;
-    let mut high_free = 0u64;
-    let mut low_total = 0u64;
-    let mut low_free = 0u64;
+    let mut total = 0u64;
+    let mut free = 0u64;
     for line in meminfo_lines.iter() {
-        if line.contains("LowFree") { // Kernel remaining
+        if line.contains("MemTotal") { // Total available
             let line_split: Vec<&str> = line.split_whitespace().collect();
-            low_free = u64::from_str(line_split[2]).unwrap();
+            total = u64::from_str(line_split[2]).unwrap();
             num_found += 1;
-        } else if line.contains("LowTotal") { // Kernel available
+        } else if line.contains("MemFree") { // Total available for new application
             let line_split: Vec<&str> = line.split_whitespace().collect();
-            low_total = u64::from_str(line_split[2]).unwrap();
-            num_found += 1;
-        } else if line.contains("HighFree") { // User space remaining
-            let line_split: Vec<&str> = line.split_whitespace().collect();
-            high_free = u64::from_str(line_split[2]).unwrap();
-            num_found += 1;
-        } else if line.contains("HighTotal") { // User space available
-            let line_split: Vec<&str> = line.split_whitespace().collect();
-            high_total = u64::from_str(line_split[2]).unwrap();
+            free = u64::from_str(line_split[2]).unwrap();
             num_found += 1;
         }
-
-        if num_found == 4 {
+        
+        if num_found == 2 {
             break;
         }
     }
 
     // Ensure we did all the wonderful string parsing correctly
-    if num_found != 4 {
+    if num_found != 2 {
         error!("/proc/meminfo parsed incorrectly...?");
         return Err(());
     }
 
     // /proc/meminfo currently displays in kb
-    let k_used = low_total - low_free;
-    let k_available = low_total;
-    let u_used = high_total - high_free;
-    let u_available = high_total;
+    let used = total - free;
 
-    Ok(Ram {
-        kernel: RamData {
-            bytes_used: k_used,
-            bytes_available: k_available
-        },
-        user_space: RamData {
-            bytes_used: u_used,
-            bytes_available: u_available
-        }
+    Ok(RamData {
+        bytes_used: used,
+        bytes_available: total
     })
 }
