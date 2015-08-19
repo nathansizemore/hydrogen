@@ -11,7 +11,6 @@
 // With Secondary Licenses", as defined by
 // the Mozilla Public License, v. 2.0.
 
-#![allow(dead_code)]
 
 #[macro_use]
 extern crate log;
