@@ -590,6 +590,9 @@ fn get_current_ram_usage() -> Result<Ram, ()> {
     let u8_buf = String::from_utf8(output.stdout).unwrap();
     let meminfo_lines: Vec<&str> = u8_buf.split('\n').collect();
 
+    trace!("u8_buf: {}", u8_buf);
+    trace!("meminfo_lines.len(): {}", meminfo_lines.len());
+
     // Current meminfo line layout
     //
     // +-----------------+-----------+-------------------+
