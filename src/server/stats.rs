@@ -491,18 +491,18 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
             break;
         }
 
-        let user_1 = u64::from_str(this_line_1[1]).unwrap();
-        let user_2 = u64::from_str(this_line_2[1]).unwrap();
-        let user_3 = u64::from_str(this_line_3[1]).unwrap();
-        let nice_1 = u64::from_str(this_line_1[2]).unwrap();
-        let nice_2 = u64::from_str(this_line_2[2]).unwrap();
-        let nice_3 = u64::from_str(this_line_3[2]).unwrap();
-        let system_1 = u64::from_str(this_line_1[3]).unwrap();
-        let system_2 = u64::from_str(this_line_2[3]).unwrap();
-        let system_3 = u64::from_str(this_line_3[3]).unwrap();
-        let idle_1 = u64::from_str(this_line_1[4]).unwrap();
-        let idle_2 = u64::from_str(this_line_2[4]).unwrap();
-        let idle_3 = u64::from_str(this_line_3[4]).unwrap();
+        let user_1 = i64::from_str(this_line_1[1]).unwrap();
+        let user_2 = i64::from_str(this_line_2[1]).unwrap();
+        let user_3 = i64::from_str(this_line_3[1]).unwrap();
+        let nice_1 = i64::from_str(this_line_1[2]).unwrap();
+        let nice_2 = i64::from_str(this_line_2[2]).unwrap();
+        let nice_3 = i64::from_str(this_line_3[2]).unwrap();
+        let system_1 = i64::from_str(this_line_1[3]).unwrap();
+        let system_2 = i64::from_str(this_line_2[3]).unwrap();
+        let system_3 = i64::from_str(this_line_3[3]).unwrap();
+        let idle_1 = i64::from_str(this_line_1[4]).unwrap();
+        let idle_2 = i64::from_str(this_line_2[4]).unwrap();
+        let idle_3 = i64::from_str(this_line_3[4]).unwrap();
 
         trace!("user_1: {}", user_1);
         trace!("user_2: {}", user_2);
@@ -519,10 +519,24 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
 
         let mut cpu_delta = Vec::<u64>::with_capacity(4);
         unsafe { cpu_delta.set_len(4); }
-        cpu_delta[0] = (user_3 - user_2) - (user_2 - user_1);
-        cpu_delta[1] = (nice_3 - nice_2) - (nice_2 - nice_1);
-        cpu_delta[2] = (system_3 - system_2) - (system_2 - system_1);
-        cpu_delta[3] = (idle_3 - idle_2) - (idle_2 - idle_1);
+
+        // Eat it, arithmetic overflows...
+        match (user_3 - user_2) - (user_2 - user_1) {
+            x if x < 0 => cpu_delta[0] = (x * -1) as u64,
+            x => cpu_delta[0] = x as u64
+        };
+        match (nice_3 - nice_2) - (nice_2 - nice_1) {
+            x if x < 0 => cpu_delta[1] = (x * -1) as u64,
+            x => cpu_delta[1] = x as u64
+        };
+        match (system_3 - system_2) - (system_2 - system_1) {
+            x if x < 0 => cpu_delta[2] = (x * -1) as u64,
+            x => cpu_delta[2] = x as u64
+        };
+        match (idle_3 - idle_2) - (idle_2 - idle_1) {
+            x if x < 0 => cpu_delta[3] = (x * -1) as u64,
+            x => cpu_delta[3] = x as u64
+        };
 
         stat_deltas.push(cpu_delta);
     }
