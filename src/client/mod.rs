@@ -12,9 +12,8 @@
 // the Mozilla Public License, v. 2.0.
 
 
-use std::{str};
-use std::ffi::{CStr, CString};
-use std::thread;
+use std::ffi::CStr;
+use std::{str, thread};
 use std::net::TcpStream;
 use std::sync::mpsc::{channel, Sender, Receiver};
 

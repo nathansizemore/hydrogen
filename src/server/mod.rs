@@ -161,7 +161,7 @@ impl Server {
     fn request_for_server_stats(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
         trace!("request_for_server_stats");
 
-        let mut sec_interval = 1.0f32;
+        let mut sec_interval;
         let u8_ptr = buffer.as_ptr();
         unsafe {
             let f32_ptr: *const f32 = mem::transmute(u8_ptr.offset(1));
@@ -175,7 +175,7 @@ impl Server {
                 // FIXME - Find a way to accept a mutable reference to a socket, or
                 // maybe go through and make the streams implement copy?
                 let mut socket = socket.clone();
-                socket.write(buf);
+                let _ = socket.write(buf);
             }
             Err(_) => { }
         };

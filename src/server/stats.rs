@@ -58,10 +58,12 @@ use super::super::rustc_serialize::json;
 
 // Global mutable state, ftw!
 
-// Server statistics collection
+/// This is set to point to an actual location passed in through the
+/// init function. It is assumed that whatever is passed in will have a static lifetime.
+/// The ownness of lifetime guarantee is on the caller of stats::init()
 static mut data: *mut Mutex<GeneralData> = 0 as *mut Mutex<GeneralData>;
 
-// Server start time, used for calculating up_time
+/// Server start time, used for calculating up_time
 static mut start_time: f64 = 0 as f64;
 
 
