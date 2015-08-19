@@ -42,7 +42,7 @@ pub extern "C" fn hydrogen_init() {
         }),
         output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
         level: log::LogLevelFilter::Trace,
-    }, log::LogLevelFilter::Debug);
+    }, log::LogLevelFilter::Trace);
 
     trace!("Logger initialized :)");
 }
