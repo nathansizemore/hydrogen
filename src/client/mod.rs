@@ -34,7 +34,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
-    trace!("Rust - start()");
+    trace!("hydrogen_start");
 
     let mut r_address;
     unsafe {
@@ -44,7 +44,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
     let host_address = match str::from_utf8(s_address) {
         Ok(safe_str) => safe_str,
         Err(_) => {
-            error!("Invalid UTF-8");
+            error!("Invalid UTF-8 in address");
             return -100 as c_int;
         }
     };
@@ -64,7 +64,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
         error!("Error connecting to {} - {}", host_address, result.unwrap_err());
         return -101 as c_int;
     }
-    debug!("Connected");
+    debug!("client connected");
     on_connect_handler();
 
     let stream = result.unwrap();
@@ -103,7 +103,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
 /// Returns -1 on error
 #[no_mangle]
 pub extern "C" fn hydrogen_write(buffer: *const uint8_t, len: usize) -> c_int {
-    trace!("Rust.write");
+    trace!("hydrogen_write");
 
     let n_buffer = unsafe { Vec::<u8>::from_raw_parts(buffer.offset(0) as *mut u8, len, len) };
 
@@ -124,7 +124,7 @@ pub extern "C" fn hydrogen_write(buffer: *const uint8_t, len: usize) -> c_int {
 /// Forever listens to incoming data and when a complete message is received,
 /// the passed callback is hit
 fn reader_thread(client: Bstream, handler: extern fn(*const uint8_t, len: usize)) {
-    trace!("Rust.reader_thread started");
+    trace!("hydrogen reader_thread started");
 
     let mut reader = client.clone();
     loop {
@@ -143,14 +143,14 @@ fn reader_thread(client: Bstream, handler: extern fn(*const uint8_t, len: usize)
             }
         };
     }
-    debug!("Rust.reader_thread finished");
+    debug!("hydrogen reader_thread finished");
     unsafe { let _ = (*kill_tx).send(()); }
 }
 
 /// Forever listens to Receiver<Vec<u8>> waiting on messages to come in
 /// Once available, blocks until the entire message has been written
 fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream) {
-    trace!("Rust.writer_thread started");
+    trace!("hydrogen writer_thread started");
 
     let mut writer = client.clone();
     loop {
@@ -171,7 +171,7 @@ fn writer_thread(rx: Receiver<Vec<u8>>, client: Bstream) {
         };
     }
 
-    debug!("Rust.writer_thread finished");
+    debug!("hydrogen writer_thread finished");
     unsafe { let _ = (*kill_tx).send(()); }
 }
 
