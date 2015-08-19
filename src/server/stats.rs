@@ -519,10 +519,10 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
 
         let mut cpu_delta = Vec::<u64>::with_capacity(4);
         unsafe { cpu_delta.set_len(4); }
-        cpu_delta[0] = (user_2 - user_1) - (user_3 - user_2);
-        cpu_delta[1] = (nice_2 - nice_1) - (nice_3 - nice_2);
-        cpu_delta[2] = (system_2 - system_1) - (system_3 - system_2);
-        cpu_delta[3] = (idle_2 - idle_1) - (idle_3 - idle_2);
+        cpu_delta[0] = (user_3 - user_2) - (user_2 - user_1);
+        cpu_delta[1] = (nice_3 - nice_2) - (nice_2 - nice_1);
+        cpu_delta[2] = (system_3 - system_2) - (system_2 - system_1);
+        cpu_delta[3] = (idle_3 - idle_2) - (idle_2 - idle_1);
 
         stat_deltas.push(cpu_delta);
     }
