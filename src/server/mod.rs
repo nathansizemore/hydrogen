@@ -15,7 +15,7 @@
 use std::mem;
 use std::thread;
 use std::thread::JoinHandle;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Sender, Receiver};
 
@@ -121,7 +121,10 @@ impl Server {
     /// Starts the server listening to the event loop
     pub fn begin(&mut self) {
         trace!("server begin");
-        stats::init();
+
+        // Setup server statistics
+        let mut locked_data = Mutex::new(stats::GeneralData::new());
+        stats::init(&mut locked_data);
         trace!("stats initialized");
 
         let mut r_pool = ResourcePool::new();
