@@ -253,6 +253,9 @@ impl EventLoop {
                             let list_handle = s_list_clone.clone();
                             let socket_clone = socket.clone();
                             let msg_clone = msg.clone();
+
+                            trace!("Sending to user space from epoll loop");
+
                             let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
 
                             // Track message received event and num bytes received

@@ -276,6 +276,8 @@ pub fn conn_lost() {
 /// Increments the total number of messages received
 #[inline]
 pub fn msg_recv() {
+    trace!("msg_recv");
+
     let mut d_guard;
     unsafe {
         match (*data).lock() {
@@ -295,6 +297,8 @@ pub fn msg_recv() {
 /// Adds amount to the total number of bytes received
 #[inline]
 pub fn bytes_recv(amount: usize) {
+    trace!("bytes_recv: {}", amount);
+
     let mut d_guard;
     unsafe {
         match (*data).lock() {
