@@ -158,6 +158,8 @@ impl Server {
     /// Request for server stats
     #[allow(unused_variables)]
     fn request_for_server_stats(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
+        trace!("request_for_server_stats");
+
         let mut sec_interval = 1.0f32;
         let u8_ptr = buffer.as_ptr();
         unsafe {
@@ -167,6 +169,7 @@ impl Server {
 
         match stats::as_serialized_buffer(sec_interval) {
             Ok(ref mut buf) => {
+                trace!("Serialized ok, writing response");
                 // Yeah, this is dumb...
                 // FIXME - Find a way to accept a mutable reference to a socket, or
                 // maybe go through and make the streams implement copy?

@@ -351,6 +351,8 @@ pub fn msg_sent() {
 
 /// Returns the structure as a JSON serialized Vec<u8> with CPU data for perf_sec time
 pub fn as_serialized_buffer(perf_sec: f32) -> Result<Vec<u8>, ()> {
+    trace!("as_serialized_buffer");
+
     // We don't need to keep a lock on the struct for this operation, so we
     // are going to clone it, release the lock, and send the cloned version
     let mut d_clone;
@@ -398,6 +400,8 @@ pub fn as_serialized_buffer(perf_sec: f32) -> Result<Vec<u8>, ()> {
 /// This is a blocking function and will block for sec * 2 seconds. This is
 /// because two delta changes at sec are needed for accurate readings
 fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
+    trace!("cpu_usage_for_secs: {}", sec);
+
     if sec <= 0.0f32 {
         warn!("cpu_usage_for_secs - sec must be greater than zero.");
         return Err(());
@@ -409,17 +413,23 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
 
+    trace!("output_1: {}", String::from_utf8_lossy(&output_1.stdout));
+
     // Sleep for sec
     thread::sleep_ms((sec * 1000.0f32) as u32);
     let output_2 = Command::new("cat").arg("/proc/stat")
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
 
+    trace!("output_2: {}", String::from_utf8_lossy(&output_2.stdout));
+
     // Sleep for sec
     thread::sleep_ms((sec * 1000.0f32) as u32);
     let output_3 = Command::new("cat").arg("/proc/stat")
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+
+    trace!("output_3: {}", String::from_utf8_lossy(&output_3.stdout));
 
     // Unfortunately, output.stdout will be a Vec<u8> instead of a string
     // I don't really care to parse based on anything specifically, so we're
@@ -492,9 +502,13 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
     }
 
     // Get clock ticks per sec
+    trace!("getting clk_tcks");
     let output = Command::new("getconf").arg("CLK_TCK")
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+
+    trace!("getconf CLK_TCK: {}", String::from_utf8_lossy(&output.stdout));
+
     let clk_tck = u32::from_str(
             str::from_utf8(&output.stdout).unwrap().trim())
             .unwrap();
