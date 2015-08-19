@@ -96,6 +96,8 @@ impl EventLoop {
         for new_stream in rx.iter() {
             match NbetStream::new(new_stream) {
                 Ok(s_stream) => {
+                    trace!("New stream received in epoll.new_stream.rx");
+
                     // Add to master list
                     let socket = Socket::new(s_stream);
 
@@ -110,6 +112,8 @@ impl EventLoop {
                     let s_list = s_guard.deref_mut();
                     let s_fd = socket.raw_fd();
                     s_list.push_back(socket);
+
+                    trace!("socket added to master list");
 
                     // Track the new connection
                     stats::conn_recv();

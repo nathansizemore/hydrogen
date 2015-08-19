@@ -121,6 +121,9 @@ impl Server {
     /// Starts the server listening to the event loop
     pub fn begin(&mut self) {
         trace!("server begin");
+        stats::init();
+        trace!("stats initialized");
+
         let mut r_pool = ResourcePool::new();
         loop {
             match self.data_rx.recv() {
