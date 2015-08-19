@@ -31,7 +31,7 @@ static mut kill_tx: *mut Sender<()> = 0 as *mut Sender<()>;
 
 #[no_mangle]
 pub extern "C" fn hydrogen_start(address: *const c_char,
-    data_handler: extern fn(*const uint8_t),
+    data_handler: extern fn(*const uint8_t, usize len),
     on_connect_handler: extern fn(),
     on_disconnect_handler: extern fn()) -> c_int {
 
@@ -135,7 +135,7 @@ fn reader_thread(client: Bstream, handler: extern fn(*const uint8_t)) {
                 thread::Builder::new()
                     .name("Reader-Worker".to_string())
                     .spawn(move||{
-                        handler(buffer.as_ptr());
+                        handler(buffer.as_ptr(), buffer.len());
                     }).unwrap();
             }
             Err(e) => {
