@@ -136,6 +136,7 @@ impl Server {
 
                     // Request for server statistics
                     if buff.len() == 5 && buff[0] == 0x0D {
+                        trace!("request for server statistics");
                         fp_wrapper = Arc::new(FpWrapper::new(Box::new(Server::request_for_server_stats)));
                     }
 

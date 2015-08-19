@@ -445,6 +445,10 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
     let stat_lines_2: Vec<&str> = u8_buf_2.split('\n').collect();
     let stat_lines_3: Vec<&str> = u8_buf_3.split('\n').collect();
 
+    trace!("stat_lines_1.len(): {}", stat_lines_1.len());
+    trace!("stat_lines_2.len(): {}", stat_lines_2.len());
+    trace!("stat_lines_3.len(): {}", stat_lines_3.len());
+
     // We only care about fields 1, 2, 3, and 4
     // +-------+------------+-------------------------------------------------------+
     // | field |    name    |   description                                         |
@@ -477,6 +481,10 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
         let this_line_1: Vec<&str> = line_1.split_whitespace().collect();
         let this_line_2: Vec<&str> = line_2.split_whitespace().collect();
         let this_line_3: Vec<&str> = line_3.split_whitespace().collect();
+
+        trace!("this_line_1.len(): {}", this_line_1.len());
+        trace!("this_line_2.len(): {}", this_line_2.len());
+        trace!("this_line_3.len(): {}", this_line_3.len());
 
         // Have we read all the cpu info yet?
         if !this_line_1[0].contains("cpu") {
