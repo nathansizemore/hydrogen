@@ -581,14 +581,16 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
     for line in meminfo_lines.iter() {
         if line.contains("MemTotal") { // Total available
             let line_split: Vec<&str> = line.split_whitespace().collect();
-            total = u64::from_str(line_split[2]).unwrap();
+            trace!("assigning total: {}", line_split[1]);
+            total = u64::from_str(line_split[1]).unwrap() * 1024u64;
             num_found += 1;
         } else if line.contains("MemFree") { // Total available for new application
             let line_split: Vec<&str> = line.split_whitespace().collect();
-            free = u64::from_str(line_split[2]).unwrap();
+            trace!("assigning free: {}", line_split[1]);
+            free = u64::from_str(line_split[1]).unwrap() * 1024u64;
             num_found += 1;
         }
-        
+
         if num_found == 2 {
             break;
         }
