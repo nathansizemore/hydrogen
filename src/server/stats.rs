@@ -534,7 +534,7 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
         let dividend = stat_delta[0] + stat_delta[1] + stat_delta[2];
         let divisor = stat_delta[0] + stat_delta[1] + stat_delta[2] + stat_delta[3];
 
-        let usage: f32 = (dividend as f32 / divisor as f32) * clk_tck as f32;
+        let usage: f32 = (dividend as f32 / divisor as f32) * (clk_tck * sec) as f32;
         if x == 0 { // Overall
             overall = usage;
         } else { // Core x
@@ -562,7 +562,7 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
     // going to convert to a string, and then split on new lines
     let u8_buf = String::from_utf8(output.stdout).unwrap();
     let meminfo_lines: Vec<&str> = u8_buf.split('\n').collect();
-    
+
     trace!("meminfo_lines.len(): {}", meminfo_lines.len());
 
     // Current meminfo line layout
