@@ -170,7 +170,7 @@ impl Server {
 
         match stats::as_serialized_buffer(sec_interval) {
             Ok(ref mut buf) => {
-                trace!("Serialized ok, writing response");
+                trace!("Writing response, buf.len(): {}", buf.len());
                 // Yeah, this is dumb...
                 // FIXME - Find a way to accept a mutable reference to a socket, or
                 // maybe go through and make the streams implement copy?
