@@ -396,23 +396,17 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
 
-    trace!("output_1: {}", String::from_utf8_lossy(&output_1.stdout));
-
     // Sleep for sec
     thread::sleep_ms((sec * 1000.0f32) as u32);
     let output_2 = Command::new("cat").arg("/proc/stat")
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
 
-    trace!("output_2: {}", String::from_utf8_lossy(&output_2.stdout));
-
     // Sleep for sec
     thread::sleep_ms((sec * 1000.0f32) as u32);
     let output_3 = Command::new("cat").arg("/proc/stat")
         .output()
         .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
-
-    trace!("output_3: {}", String::from_utf8_lossy(&output_3.stdout));
 
     // Unfortunately, output.stdout will be a Vec<u8> instead of a string
     // I don't really care to parse based on anything specifically, so we're
@@ -568,8 +562,7 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
     // going to convert to a string, and then split on new lines
     let u8_buf = String::from_utf8(output.stdout).unwrap();
     let meminfo_lines: Vec<&str> = u8_buf.split('\n').collect();
-
-    trace!("u8_buf: {}", u8_buf);
+    
     trace!("meminfo_lines.len(): {}", meminfo_lines.len());
 
     // Current meminfo line layout
