@@ -25,6 +25,8 @@ rustc-serialize = "*"
 # From git
 [dependencies.epoll]
 git = "https://github.com/nathansizemore/epoll"
+branch = "develop"
 
 [dependencies.simple-stream]
 git = "https://github.com/nathansizemore/simple-stream"
+branch = "develop"
