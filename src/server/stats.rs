@@ -577,11 +577,13 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
         if line.contains("MemTotal") { // Total available
             let line_split: Vec<&str> = line.split_whitespace().collect();
             trace!("assigning total: {}", line_split[1]);
+            // /proc/meminfo currently displays in kb
             total = u64::from_str(line_split[1]).unwrap() * 1024u64;
             num_found += 1;
         } else if line.contains("MemFree") { // Total available for new application
             let line_split: Vec<&str> = line.split_whitespace().collect();
             trace!("assigning free: {}", line_split[1]);
+            // /proc/meminfo currently displays in kb
             free = u64::from_str(line_split[1]).unwrap() * 1024u64;
             num_found += 1;
         }
@@ -597,9 +599,7 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
         return Err(());
     }
 
-    // /proc/meminfo currently displays in kb
     let used = total - free;
-
     Ok(RamData {
         bytes_used: used,
         bytes_available: total
