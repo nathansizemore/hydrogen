@@ -1,4 +1,4 @@
-# hydrogen [<img src="https://travis-ci.org/nathansizemore/hydrogen.png?branch=master">](https://travis-ci.org/nathansizemore/hydrogen)
+# hydrogen [<img src="https://travis-ci.org/nathansizemore/hydrogen.png?branch=develop">](https://travis-ci.org/nathansizemore/hydrogen)
 
 [Documentation](https://google.com)
 
