@@ -534,7 +534,7 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
         let dividend = stat_delta[0] + stat_delta[1] + stat_delta[2];
         let divisor = stat_delta[0] + stat_delta[1] + stat_delta[2] + stat_delta[3];
 
-        let usage: f32 = (dividend as f32 / divisor as f32) * (clk_tck * sec) as f32;
+        let usage: f32 = (dividend as f32 / divisor as f32) * (clk_tck as f32 * sec) as f32;
         if x == 0 { // Overall
             overall = usage;
         } else { // Core x
