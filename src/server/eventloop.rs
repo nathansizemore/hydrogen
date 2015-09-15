@@ -116,7 +116,7 @@ impl EventLoop {
                     trace!("socket added to master list");
 
                     // Track the new connection
-                    stats::conn_recv();
+                    //stats::conn_recv();
 
                     // Add to epoll
                     let mut event = EpollEvent {
@@ -259,8 +259,8 @@ impl EventLoop {
                             let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
 
                             // Track message received event and num bytes received
-                            stats::msg_recv();
-                            stats::bytes_recv(msg.len());
+                            // stats::msg_recv();
+                            // stats::bytes_recv(msg.len());
                         }
                     }
                     Err(e) => {

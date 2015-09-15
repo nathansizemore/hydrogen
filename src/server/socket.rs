@@ -61,8 +61,8 @@ impl Socket {
     pub fn write(&mut self, buf: &Vec<u8>) -> WriteResult {
         let result = self.stream.write(buf);
         if result.is_ok() {
-            stats::msg_sent();
-            stats::bytes_sent(buf.len());
+            // stats::msg_sent();
+            // stats::bytes_sent(buf.len());
         }
         result
     }

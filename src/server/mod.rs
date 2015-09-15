@@ -123,8 +123,8 @@ impl Server {
         trace!("server begin");
 
         // Setup server statistics
-        let mut locked_data = Mutex::new(stats::GeneralData::new());
-        stats::init(&mut locked_data);
+        //let mut locked_data = Mutex::new(stats::GeneralData::new());
+        //stats::init(&mut locked_data);
         trace!("stats initialized");
 
         let mut r_pool = ResourcePool::new();
@@ -168,16 +168,16 @@ impl Server {
             sec_interval = *f32_ptr;
         }
 
-        match stats::as_serialized_buffer(sec_interval) {
-            Ok(ref mut buf) => {
-                trace!("Writing response, buf.len(): {}", buf.len());
-                // Yeah, this is dumb...
-                // FIXME - Find a way to accept a mutable reference to a socket, or
-                // maybe go through and make the streams implement copy?
-                let mut socket = socket.clone();
-                let _ = socket.write(buf);
-            }
-            Err(_) => { }
-        };
+        // match stats::as_serialized_buffer(sec_interval) {
+        //     Ok(ref mut buf) => {
+        //         trace!("Writing response, buf.len(): {}", buf.len());
+        //         // Yeah, this is dumb...
+        //         // FIXME - Find a way to accept a mutable reference to a socket, or
+        //         // maybe go through and make the streams implement copy?
+        //         let mut socket = socket.clone();
+        //         let _ = socket.write(buf);
+        //     }
+        //     Err(_) => { }
+        // };
     }
 }
