@@ -336,7 +336,7 @@ pub fn as_serialized_buffer(perf_sec: f32) -> Result<Vec<u8>, ()> {
     // are going to clone it, release the lock, and send the cloned version
     let mut d_clone;
     {
-        let mut d_guard;
+        let d_guard;
         unsafe {
             match (*data).lock() {
                 Ok(guard) => d_guard = guard,
