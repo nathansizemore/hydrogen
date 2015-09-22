@@ -6,10 +6,6 @@
 // distributed with this file, You can
 // obtain one at
 // http://mozilla.org/MPL/2.0/.
-//
-// This Source Code Form is "Incompatible
-// With Secondary Licenses", as defined by
-// the Mozilla Public License, v. 2.0.
 
 
 #[macro_use]
@@ -20,12 +16,12 @@ extern crate libc;
 extern crate rand;
 extern crate simple_stream;
 extern crate num_cpus;
-//#[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 extern crate epoll;
 extern crate rustc_serialize;
 
 pub mod client;
-//#[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 pub mod server;
 
 
@@ -33,7 +29,7 @@ pub mod server;
 /// Initializes all the global things
 #[no_mangle]
 pub extern "C" fn hydrogen_init() {
-    println!("Hydrogen initializing...");
+    println!("Initializing hydrogen logger...");
 
     let _ = fern::init_global_logger(fern::DispatchConfig {
         format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
@@ -43,5 +39,6 @@ pub extern "C" fn hydrogen_init() {
         level: log::LogLevelFilter::Trace,
     }, log::LogLevelFilter::Trace);
 
-    trace!("Logger initialized :)");
+    trace!("Hydrogen initialized :)");
+    info!("Log file: /var/log/hydrogen.log");
 }
