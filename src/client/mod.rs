@@ -32,7 +32,7 @@ pub extern "C" fn hydrogen_start(address: *const c_char,
 
     trace!("hydrogen_start");
 
-    let mut r_address;
+    let r_address;
     unsafe {
         r_address = CStr::from_ptr(address);
     }

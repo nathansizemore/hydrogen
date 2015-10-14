@@ -121,7 +121,7 @@ impl Server {
         // Setup server statistics
         let mut locked_data = Mutex::new(stats::GeneralData::new());
         stats::init(&mut locked_data);
-        trace!("stats initialized");
+        info!("data module initialized");
 
         let mut r_pool = ResourcePool::new();
         loop {
@@ -157,7 +157,7 @@ impl Server {
     fn request_for_server_stats(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
         trace!("request_for_server_stats");
 
-        let mut sec_interval;
+        let sec_interval;
         let u8_ptr = buffer.as_ptr();
         unsafe {
             let f32_ptr: *const f32 = mem::transmute(u8_ptr.offset(1));
