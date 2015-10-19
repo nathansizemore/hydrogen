@@ -13,16 +13,13 @@ use std::thread::JoinHandle;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-use server::types::*;
-use server::FpWrapper;
-use server::socket::Socket;
+use types::*;
+use socket::Socket;
 
-#[allow(dead_code)]
+
 pub struct WorkerThread {
-    /// Handle to this process
-    prox: JoinHandle<()>,
     /// Sender to this threads receiver
-    prox_tx: Sender<(Arc<FpWrapper>, SocketList, Socket, Vec<u8>)>
+    tx: Sender<(*const EventFunction, SocketList, Socket, Vec<u8>)>
 }
 
 
@@ -31,29 +28,28 @@ impl WorkerThread {
     /// Creates a new worker thread
     pub fn new() -> WorkerThread {
         let (tx, rx): (
-            Sender<(Arc<FpWrapper>, SocketList, Socket, Vec<u8>)>,
-            Receiver<(Arc<FpWrapper>, SocketList, Socket, Vec<u8>)>)
+            Sender<(*const EventFunction, SocketList, Socket, Vec<u8>)>,
+            Receiver<(*const EventFunction, SocketList, Socket, Vec<u8>)>)
             = channel();
 
-        let prox = thread::Builder::new()
+        thread::Builder::new()
             .name("WorkerThread".to_string())
             .spawn(move || {
                 WorkerThread::start(rx);
             }).unwrap();
 
         WorkerThread {
-            prox: prox,
-            prox_tx: tx
+            tx: tx
         }
     }
 
     /// Returns a clone of this thread's Sender<T>
-    pub fn sender(&self) -> Sender<(Arc<FpWrapper>, SocketList, Socket, Vec<u8>)> {
-        self.prox_tx.clone()
+    pub fn sender(&self) -> Sender<(*const EventFunction, SocketList, Socket, Vec<u8>)> {
+        self.tx.clone()
     }
 
     /// Starts the worker thread
-    fn start(rx: Receiver<(Arc<FpWrapper>, SocketList, Socket, Vec<u8>)>) {
+    fn start(rx: Receiver<(*const EventFunction, SocketList, Socket, Vec<u8>)>) {
         for (task, sockets, socket, buffer) in rx.iter() {
             task.run(sockets, socket, buffer);
         }

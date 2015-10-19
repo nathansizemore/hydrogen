@@ -47,9 +47,9 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Mutex;
 use std::process::Command;
 
-use super::super::time;
-use super::super::num_cpus;
-use super::super::rustc_serialize::json;
+use super::time;
+use super::num_cpus;
+use super::rustc_serialize::json;
 
 
 // Global mutable state, ftw!

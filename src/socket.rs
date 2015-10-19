@@ -13,10 +13,9 @@
 
 use std::os::unix::io::RawFd;
 
-use server::stats;
-
-use super::super::rand;
-use super::super::simple_stream::nbetstream::{
+use stats;
+use super::rand;
+use super::simple_stream::nbetstream::{
     NbetStream,
     ReadResult,
     WriteResult

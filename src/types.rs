@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
 use std::sync::mpsc::{Sender, Receiver};
 
-use server::socket::Socket;
+use socket::Socket;
 
 /// Thread safe, Arc, locked LinkedList of Sockets
 pub type SocketList = Arc<Mutex<LinkedList<Socket>>>;
@@ -27,10 +27,7 @@ pub type SocketListSender = Sender<SocketList>;
 pub type SocketListReceiver = Receiver<SocketList>;
 
 /// Function type for passing epoll events into
-pub type EventFunction = Fn(SocketList, Socket, Vec<u8>) + Send + Sync;
-
-/// Boxed version of EventFunction
-pub type EventFunctionPtr = Box<EventFunction>;
+pub type EventFunction = Arc<Fn(SocketList, Socket, Vec<u8>) + 'static + Send + Sync>;
 
 /// Tuple representing the normal event params
 pub type EventTuple = (SocketList, Socket, Vec<u8>);

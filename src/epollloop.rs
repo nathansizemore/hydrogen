@@ -22,45 +22,39 @@ use std::sync::mpsc::{
     TryRecvError
 };
 
-use super::super::epoll;
-use super::super::epoll::util::*;
-use super::super::epoll::EpollEvent;
-use super::super::simple_stream::nbetstream::NbetStream;
+use epoll;
+use epoll::util::*;
+use epoll::EpollEvent;
+use simple_stream::nbetstream::NbetStream;
+use stats;
+use types::*;
+use socket::Socket;
+use ipc::*;
 
-use server::stats;
-use server::types::*;
-use server::socket::Socket;
 
-
-#[allow(dead_code)]
-pub struct EventLoop {
-    /// Handle to event loop process
-    prox: JoinHandle<()>,
-    /// Sender<T> to proc
-    prox_tx: Sender<TcpStream>
+pub struct EpollLoop {
+    /// Sender<TcpStream> to this process
+    tx: Sender<TcpStream>
 }
 
 
-impl EventLoop {
+impl EpollLoop {
 
-    /// Returns a new EventLoop
-    pub fn new(server_tx: Sender<EventTuple>) -> EventLoop {
+    /// Creates a new EpollLoop
+    pub fn new(server_tx: Sender<EventTuple>) -> EpollLoop {
         let (tx, rx): (Sender<TcpStream>, Receiver<TcpStream>) = channel();
         let prox = thread::Builder::new()
-            .name("EventLoop".to_string())
+            .name("EpollLoop".to_string())
             .spawn(move || {
-                EventLoop::start(rx, server_tx);
+                EpollLoop::start(rx, server_tx);
             }).unwrap();
 
-        EventLoop {
-            prox: prox,
-            prox_tx: tx
-        }
+        EpollLoop { tx: tx }
     }
 
-    /// Returns a clone of this EventLoop's Sender<TcpStream> channel
+    /// Returns a clone of this EpollLoop's Sender<TcpStream> channel
     pub fn sender(&self) -> Sender<TcpStream> {
-        self.prox_tx.clone()
+        self.tx.clone()
     }
 
     /// Main event loop
@@ -86,7 +80,7 @@ impl EventLoop {
         thread::Builder::new()
             .name("EpollLoop".to_string())
             .spawn(move || {
-                EventLoop::epoll_loop(uspace_tx, c_sockets, c_epoll_instance, err_rx);
+                EpollLoop::epoll_loop(uspace_tx, c_sockets, c_epoll_instance, err_rx);
             }).unwrap();
 
         for new_stream in rx.iter() {
@@ -156,7 +150,7 @@ impl EventLoop {
                         let s_clone = sockets.clone();
                         let epfd_clone = epoll_instance.clone();
 
-                        EventLoop::handle_epoll_event(epfd_clone,
+                        EpollLoop::handle_epoll_event(epfd_clone,
                             &events[x as usize], s_clone, tx_clone);
                     }
                 }
@@ -266,14 +260,14 @@ impl EventLoop {
                         errd_socket_ids.push(socket.id());
                         let s_clone = socket.clone();
                         let epfd_clone = epoll_instance.clone();
-                        EventLoop::remove_socket_from_epoll(s_clone, epfd_clone);
+                        EpollLoop::remove_socket_from_epoll(s_clone, epfd_clone);
                     }
                 }
             }
         }
 
         // Remove any errd sockets from the master list of sockets
-        EventLoop::remove_sockets_from_list(errd_socket_ids, &mut s_list);
+        EpollLoop::remove_sockets_from_list(errd_socket_ids, &mut s_list);
     }
 
     /// Removes socket from the epoll watch list
@@ -342,4 +336,13 @@ impl EventLoop {
             debug!("Socket removed sucessfully");
         }
     }
+}
+
+impl Ipc for EpollLoop {
+    fn connect(&self, tx_rx: IpcChannel) { unimplemented!() }
+    fn ping(&self) { unimplemented!() }
+    fn pong(&self) { unimplemented!() }
+    fn kill(&self) { unimplemented!() }
+    fn restart(&self) { unimplemented!() }
+    fn sender(&self) -> Sender<IpcMessage> { unimplemented!() }
 }
