@@ -33,11 +33,8 @@ pub mod ipc;
 
 
 
-/// Initializes all the global things
 #[no_mangle]
 pub extern "C" fn hydrogen_init() {
-    println!("Initializing hydrogen logger...");
-
     let _ = fern::init_global_logger(fern::DispatchConfig {
         format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
             format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
@@ -45,7 +42,5 @@ pub extern "C" fn hydrogen_init() {
         output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
         level: log::LogLevelFilter::Trace,
     }, log::LogLevelFilter::Trace);
-
-    trace!("Hydrogen initialized :)");
-    info!("Log file: /var/log/hydrogen.log");
+    info!("Initialized. \nLog file: /var/log/hydrogen.log");
 }
