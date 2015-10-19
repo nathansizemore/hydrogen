@@ -33,7 +33,7 @@ pub struct Server {
     /// Type of data handler this server has setup
     handler_type: HandlerType,
     /// If type is HandlerType::Callback, this member will be executed
-    cb_ptr: *const EventFunction,
+    cb_ptr: EventFunction,
     /// If type is HandlerType::Channel, this Sender will be used
     tx: Sender<EventTuple>
 }
@@ -86,7 +86,7 @@ impl Server {
             conn_proc: Box::new(conn_proc),
             epoll_proc: Box::new(epoll_proc),
             handler_type: HandlerType::Channel,
-            cb_ptr: &default_fn,
+            cb_ptr: Arc::new(default_fn),
             tx: handler
         }
     }

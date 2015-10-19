@@ -60,7 +60,7 @@ impl ResourcePool {
     }
 
     /// Runs the passed function
-    pub fn run(&mut self, fn_ptr: *const EventFunction,
+    pub fn run(&mut self, fn_ptr: EventFunction,
                sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
         if self.next_worker == self.w_threads.len() {
             self.next_worker = 0;
