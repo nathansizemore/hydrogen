@@ -22,7 +22,7 @@ pub type IpcChannel = (Sender<IpcMessage>, Receiver<IpcMessage>);
 
 pub trait Ipc {
     fn connect(&self, tx_rx: IpcChannel);
-    fn sender(&self) -> Sender<IpcMessage>;
+    fn ipc_sender(&self) -> Sender<IpcMessage>;
     fn ping(&self);
     fn pong(&self);
     fn kill(&self);

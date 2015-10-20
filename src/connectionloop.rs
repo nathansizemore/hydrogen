@@ -58,5 +58,5 @@ impl Ipc for ConnectionLoop {
     fn pong(&self) { unimplemented!() }
     fn kill(&self) { unimplemented!() }
     fn restart(&self) { unimplemented!() }
-    fn sender(&self) -> Sender<IpcMessage> { unimplemented!() }
+    fn ipc_sender(&self) -> Sender<IpcMessage> { unimplemented!() }
 }

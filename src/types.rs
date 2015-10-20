@@ -17,17 +17,13 @@ use std::sync::mpsc::{Sender, Receiver};
 
 use socket::Socket;
 
-/// Thread safe, Arc, locked LinkedList of Sockets
+pub trait EventHandler {
+    fn on_data_received(&self, sender: Socket, sockets: SocketList, buffer: Vec<u8>);
+    fn on_socket_closed(&self, id: u32);
+}
+
+/// Thread LinkedList<Socket>
 pub type SocketList = Arc<Mutex<LinkedList<Socket>>>;
 
-/// Sender for SocketList type
-pub type SocketListSender = Sender<SocketList>;
-
-/// Receiver for SocketList type
-pub type SocketListReceiver = Receiver<SocketList>;
-
-/// Function type for passing epoll events into
-pub type EventFunction = Arc<Fn(SocketList, Socket, Vec<u8>) + 'static + Send + Sync>;
-
-/// Tuple representing the normal event params
-pub type EventTuple = (SocketList, Socket, Vec<u8>);
+/// Thread safe EventHandler
+pub type SafeHandler = Arc<Mutex<EventHandler>>;

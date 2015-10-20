@@ -32,33 +32,210 @@ use socket::Socket;
 use ipc::*;
 
 
-pub struct EpollLoop {
-    /// Sender<TcpStream> to this process
-    tx: Sender<TcpStream>
+
+pub fn begin<T: ToSocketAddrs + Send + 'static>(address: T, handler: Box<EventHandler>) {
+    // Master socket list
+    let sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
+
+    // Epoll instance
+    let epfd = create_epoll_instance();
+
+    // EpollEvent handler thread
+    let epfd1 = epfd.clone();
+    let sckts1 = sockets.clone();
+    let (tx_ep_event, rx_ep_event): (Sender<EpollEvent>, Receiver<EpollEvent>) = channel();
+    let safe_handler = Arc::new(Mutex::new(&handler));
+    thread::Builder::new()
+        .name("EpollEvent Handler".to_string())
+        .spawn(move || {
+            epoll_event_handler(epfd1, rx_ep_event, sckts1, safe_handler);
+        }).unwrap();
+
+    // Epoll wait thread
+    let epfd2 = epfd.clone();
+    thread::Builder::new()
+        .name("Epoll Wait".to_string())
+        .spawn(move || {
+            epoll_wait_loop(epfd2, tx_ep_event);
+        }).unwrap();
+
+    // New connection thread
+    let epfd3 = epfd.clone();
+    thread::Builder::new()
+        .name("TCP Incoming Listener".to_string())
+        .spawn(move || {
+            epoll_wait_loop(epfd2, tx_ep_event);
+        }).unwrap();
 }
 
+fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
+    // When added to epoll, these will be the conditions of kernel notification:
+    //
+    // EPOLLIN      - Available for read
+    // EPOLLRDHUP   - Connection has been closed
+    // EPOLLONESHOT - After an event has been received, and reported, do not track
+    //                further changes until explicitly told to do so.
+    const EVENTS: u32 = (
+        event_type::EPOLLET | // Set this fd to EdgeTrigger mode
+        event_type::EPOLLIN |
+        event_type::EPOLLRDHUP |
+        event_type::EPOLLONESHOT);
+
+    let listener = TcpListener::bind(address).unwrap();
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                trace!("New connection received");
+                // Create new socket
+                match NbetStream::new(stream) {
+                    Ok(nb_stream) => {
+                        let socket = Socket::new(nb_stream);
+                        let socket_ptr;
+                        // Add to master list
+                        { // Begin Mutex lock
+                            let mut guard = match socket.lock() {
+                                Ok(guard) => guard,
+                                Err(poisoned) => {
+                                    warn!("SocketList Mutex failed, using anyway...");
+                                    poisoned.into_inner()
+                                }
+                            };
+                            let socket_list = guard.deref_mut();
+                            socket_list.push_back(socket.clone());
+                            socket_ptr = socket_list.back_mut().unwrap() as *mut Socket;
+                        } // End Mutex lock
+
+                        // Add to epoll
+                        let sfd = socket.raw_fd();
+                        let mut event = EpollEvent {
+                            data: socket_ptr,
+                            events: EVENTS
+                        };
+                        match epoll::ctl(epfd, ctl_op::ADD, sfd, &mut event) {
+                            Ok(()) => trace!("New socket added to epoll list"),
+                            Err(e) => warn!("Epoll CtrlError during add: {}", e)
+                        };
+                    }
+                    Err(e) => warn!("Error creating nbstream: {}", e)
+                }
+            }
+            Err(e) => warn!("Error encountered during TCP connection: {}", e)
+        }
+    }
+    drop(listener);
+}
+
+fn create_epoll_instance() -> RawFd {
+    let result = epoll::create1(0);
+    if result.is_err() {
+        let err = result.unwrap_err();
+        error!("Unable to create epoll instance: {}", err);
+        panic!()
+    }
+    result.unwrap();
+}
+
+fn epoll_wait_loop(epfd: RawFd, tx_handler: Sender<EpollEvent>) {
+    // Maximum number of events we want to be notified of at one time
+    let mut events = Vec::<EpollEvent>::with_capacity(100);
+    unsafe { events.set_len(100); }
+
+    loop {
+        match epoll::wait(epfd, &mut events[..], -1) {
+            Ok(num_events) => {
+                for x in 0..num_events as usize {
+                    tx_handler.send(events[x]);
+                }
+            }
+            Err(e) => {
+                error!("Error on epoll::wait(): {}", e);
+                panic!()
+            }
+        }
+    }
+    info!("epoll_wait thread finished");
+}
+
+fn epoll_event_handler(epfd: RawFd,
+                       rx: Receiver<EpollEvent>,
+                       sockets: SocketList,
+                       handler: SafeHandler) {
+    // Types of events we care about
+    const READ_EVENT: u32 = event_type::EPOLLIN;
+    const DROP_EVENT: u32 = event_type::EPOLLRDHUP | event_type::EPOLLHUP;
+
+    // Thread pool
+    let mut pool = ResourcePool::new();
+
+    for event in rx.iter() {
+        // Pull out the socket
+        let socket;
+        { // Begin Mutex lock
+            let mut guard = match socket.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("SocketList Mutex failed, using anyway...");
+                    poisoned.into_inner()
+                }
+            };
+            let socket_ptr = event.data as *mut Socket;
+            unsafe { socket = *socket_ptr.clone(); }
+        } // End Mutex lock
+
+        if event.events & DROP_EVENT {
+            epoll_remove_fd(epfd.clone(), socket.raw_fd());
+            remove_socket_from_list(socket, sockets.clone());
+
+            let t_handler.clone();
+            thread::spawn(move || {
+
+            });
+            continue;
+        } else if event.events & READ_EVENT {
+            let t_handler = handler.clone();
+            thread::spawn(move || {
+                let guard =
+            });
+        } else { warn!("Unknown epoll event received: {}", event.data); continue; }
+    }
+}
+
+fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
+    debug!("remove_socket_from_epoll");
+
+    // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
+    // a non-null pointer in event, even though this argument is ignored.
+    // Since Linux 2.6.9, event can be specified as NULL when using
+    // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
+    // before 2.6.9 should specify a non-null pointer in event.
+    let mut rm_event = EpollEvent {
+        data: 0 as u64,
+        events: 0 as u32
+    };
+
+    // Depending on how fds are duplicated with .clone(), this may fail.
+    //
+    // If the failure case is CtlError::ENOENT, we do not care, because
+    // epoll will clean the up the descriptor after they are all dropped from
+    // program memory
+    match epoll::ctl(epfd, ctl_op::DEL, fd, &mut rm_event) {
+        Ok(()) => trace!("Socket removed from epoll watch list"),
+        Err(e) => {
+            match e {
+                CtlError::ENOENT => {
+                    trace!("Fd not found in epoll, will remove when fd is syscall closed");
+                }
+                _ => warn!("Epoll CtrlError during del: {}", e)
+            }
+        }
+    };
+}
 
 impl EpollLoop {
 
-    /// Creates a new EpollLoop
-    pub fn new(server_tx: Sender<EventTuple>) -> EpollLoop {
-        let (tx, rx): (Sender<TcpStream>, Receiver<TcpStream>) = channel();
-        let prox = thread::Builder::new()
-            .name("EpollLoop".to_string())
-            .spawn(move || {
-                EpollLoop::start(rx, server_tx);
-            }).unwrap();
 
-        EpollLoop { tx: tx }
-    }
-
-    /// Returns a clone of this EpollLoop's Sender<TcpStream> channel
-    pub fn sender(&self) -> Sender<TcpStream> {
-        self.tx.clone()
-    }
-
-    /// Main event loop
-    fn start(rx: Receiver<TcpStream>, uspace_tx: Sender<EventTuple>) {
+    /// Starts the loop listening for new accepted incoming connections
+    fn start_new_conn_listener(rx: Receiver<TcpStream>, tx_handler: Sender<EventTuple>) {
         // Master socket list
         let sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
 
@@ -78,9 +255,9 @@ impl EpollLoop {
         let c_sockets = sockets.clone();
         let c_epoll_instance = epoll_instance.clone();
         thread::Builder::new()
-            .name("EpollLoop".to_string())
+            .name("Epoll Wait Loop".to_string())
             .spawn(move || {
-                EpollLoop::epoll_loop(uspace_tx, c_sockets, c_epoll_instance, err_rx);
+                EpollLoop::epoll_loop(tx_handler, c_sockets, c_epoll_instance, err_rx);
             }).unwrap();
 
         for new_stream in rx.iter() {
@@ -90,15 +267,13 @@ impl EpollLoop {
 
                     // Add to master list
                     let socket = Socket::new(s_stream);
-
-                    // TODO - Replace with recoverable version once into_inner() is stable
-                    // Unfortunately, this is the only stable way to use mutexes at the moment
-                    // Hopefully recovering from poisoning will be in 1.2
-                    // let mut s_guard = match sockets.lock() {
-                    //     Ok(guard) => guard,
-                    //     Err(poisoned) => poisoned.into_inner()
-                    // };
-                    let mut s_guard = sockets.lock().unwrap();
+                    let mut s_guard = match sockets.lock() {
+                        Ok(guard) => guard,
+                        Err(poisoned) => {
+                            warn!("SocketList Mutex was poisoned, using anyway");
+                            poisoned.into_inner()
+                        }
+                    };
                     let s_list = s_guard.deref_mut();
                     let s_fd = socket.raw_fd();
                     s_list.push_back(socket);
@@ -106,12 +281,23 @@ impl EpollLoop {
                     trace!("socket added to master list");
 
                     // Track the new connection
-                    //stats::conn_recv();
+                    stats::conn_recv();
 
-                    // Add to epoll
+                    // Add to epoll and notify us when any of the following conditions are met:
+                    //
+                    // EPOLLIN      - Available for read
+                    // EPOLLRDHUP   - Connection has been closed
+                    // EPOLLONESHOT - After an event has been received, and reported, do not track
+                    //                further changes until explicitly told to do so.
+                    let events: u32 = (
+                        event_type::EPOLLET | // Set this fd to EdgeTrigger mode
+                        event_type::EPOLLIN |
+                        event_type::EPOLLRDHUP |
+                        event_type::EPOLLONESHOT);
+
                     let mut event = EpollEvent {
                         data: s_fd as u64,
-                        events: (event_type::EPOLLIN | event_type::EPOLLET | event_type::EPOLLRDHUP)
+                        events: events
                     };
                     match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, &mut event) {
                         Ok(()) => trace!("New socket added to epoll list"),
@@ -127,56 +313,6 @@ impl EpollLoop {
         // Kill off event loop, so unwinding can begin
         error!("EpollLoop::start() thread ended unexpectedly");
         let _ = err_tx.send(());
-    }
-
-    /// Calls epoll_wait forever waiting for events to be fired up from kernel
-    fn epoll_loop(uspace_tx: Sender<EventTuple>,
-                  sockets: SocketList,
-                  epoll_instance: RawFd,
-                  err_rx: Receiver<()>) {
-
-        // This is the maximum number of events we want to be notified of at one time
-        let mut events = Vec::<EpollEvent>::with_capacity(100);
-        unsafe { events.set_len(100); }
-
-        loop {
-            // Wait for epoll events
-            trace!("epoll_wait...");
-            match epoll::wait(epoll_instance, &mut events[..], -1) {
-                Ok(num_events) => {
-                    trace!("{} epoll event(s) received", num_events);
-                    for x in 0..num_events {
-                        let tx_clone = uspace_tx.clone();
-                        let s_clone = sockets.clone();
-                        let epfd_clone = epoll_instance.clone();
-
-                        EpollLoop::handle_epoll_event(epfd_clone,
-                            &events[x as usize], s_clone, tx_clone);
-                    }
-                }
-                Err(e) => error!("Error on epoll::wait(): {}", e)
-            }
-
-            // If we receive anything on this end or lose communication, we need to halt,
-            // because we have nowhere to send up events, our "user space" channel is
-            // gone
-            match err_rx.try_recv() {
-                Ok(_) => {
-                    error!("Terminating epoll loop");
-                    break;
-                }
-                Err(e) => {
-                    match e {
-                        TryRecvError::Empty => {}
-                        _ => {
-                            error!("Channel closed, terminating epoll loop");
-                            break;
-                        }
-                    }
-                }
-            };
-        }
-        warn!("epoll_loop - thread finished");
     }
 
     /// Processes a read on the socket that is ready for reading
@@ -272,34 +408,7 @@ impl EpollLoop {
 
     /// Removes socket from the epoll watch list
     fn remove_socket_from_epoll(socket: Socket, epoll_instance: RawFd) {
-        debug!("remove_socket_from_epoll");
 
-        // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
-        // a non-null pointer in event, even though this argument is ignored.
-        // Since Linux 2.6.9, event can be specified as NULL when using
-        // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
-        // before 2.6.9 should specify a non-null pointer in event.
-        let mut event = EpollEvent {
-            data: 0 as u64,
-            events: 0 as u32
-        };
-        let s_fd = socket.raw_fd();
-
-        // Depending on how fd are duplicated with .clone(), this may fail
-        // If the failure case is CtlError::ENOENT, we do not care, because
-        // epoll will clean the up the descriptor after they are all dropped from
-        // program memory
-        match epoll::ctl(epoll_instance, ctl_op::DEL, s_fd, &mut event) {
-            Ok(()) => trace!("Socket removed from epoll watch list"),
-            Err(e) => {
-                match e {
-                    CtlError::ENOENT => {
-                        trace!("Fd not found in epoll, will remove when fd is syscall closed");
-                    }
-                    _ => warn!("Epoll CtrlError during del: {}", e)
-                }
-            }
-        };
     }
 
     /// Removes socket_ids from master list
@@ -336,13 +445,4 @@ impl EpollLoop {
             debug!("Socket removed sucessfully");
         }
     }
-}
-
-impl Ipc for EpollLoop {
-    fn connect(&self, tx_rx: IpcChannel) { unimplemented!() }
-    fn ping(&self) { unimplemented!() }
-    fn pong(&self) { unimplemented!() }
-    fn kill(&self) { unimplemented!() }
-    fn restart(&self) { unimplemented!() }
-    fn sender(&self) -> Sender<IpcMessage> { unimplemented!() }
 }
