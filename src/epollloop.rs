@@ -220,6 +220,8 @@ fn epoll_event_handler(epfd: RawFd,
                             // Track message received event and num bytes received
                             stats::msg_recv();
                             stats::bytes_recv(msg.len());
+
+                            // TODO - Add socket fd back to epoll
                         }
                     }
                     Err(e) => {
