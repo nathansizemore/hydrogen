@@ -9,6 +9,7 @@
 use std::thread;
 use std::thread::JoinHandle;
 use std::sync::Arc;
+use std::ops::DerefMut;
 use std::sync::mpsc::{channel, Sender, Receiver};
 
 use types::*;
@@ -39,5 +40,9 @@ impl WorkerThread {
     pub fn sender(&self) -> Sender<EventHandlerFn> { self.tx.clone() }
 
     /// Starts the worker thread
-    fn start(rx: Receiver<EventHandlerFn>) { for task in rx.iter() { task(); } }
+    fn start(rx: Receiver<EventHandlerFn>) {
+        for t in rx.iter() {
+            
+        }
+    }
 }

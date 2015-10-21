@@ -7,8 +7,7 @@
 
 
 use std::thread;
-use std::thread::JoinHandle;
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{TcpListener, ToSocketAddrs};
 use std::ops::DerefMut;
 use std::os::unix::io::RawFd;
 use std::collections::LinkedList;
@@ -16,8 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{
     channel,
     Sender,
-    Receiver,
-    TryRecvError
+    Receiver
 };
 
 use epoll;
@@ -27,7 +25,6 @@ use simple_stream::nbetstream::NbetStream;
 use stats;
 use types::*;
 use socket::Socket;
-use ipc::*;
 use resources::ResourcePool;
 
 
@@ -43,23 +40,30 @@ const EVENTS: u32 = (
     event_type::EPOLLRDHUP |
     event_type::EPOLLONESHOT);
 
-
-pub fn begin<T: ToSocketAddrs + Send + 'static>(address: T, handler: Box<EventHandler>) {
+pub fn begin<T, K>(address: T, handler: Box<K>) where
+    T: ToSocketAddrs + Send + 'static,
+    K: EventHandler + Send + Sync + 'static {
     // Master socket list
     let sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
 
     // Epoll instance
-    let epfd = create_epoll_instance();
+    let result = epoll::create1(0);
+    if result.is_err() {
+        let err = result.unwrap_err();
+        error!("Unable to create epoll instance: {}", err);
+        panic!()
+    }
+    let epfd = result.unwrap();
 
     // EpollEvent handler thread
     let epfd1 = epfd.clone();
-    let sckts1 = sockets.clone();
+    let sockets1 = sockets.clone();
     let (tx_ep_event, rx_ep_event): (Sender<EpollEvent>, Receiver<EpollEvent>) = channel();
-    let safe_handler = Arc::new(Mutex::new(&handler));
+    let safe_handler = Arc::new(Mutex::new(*handler));
     thread::Builder::new()
         .name("EpollEvent Handler".to_string())
         .spawn(move || {
-            epoll_event_handler(epfd1, rx_ep_event, sckts1, safe_handler);
+            epoll_event_handler(epfd1, rx_ep_event, sockets1, safe_handler);
         }).unwrap();
 
     // Epoll wait thread
@@ -72,10 +76,11 @@ pub fn begin<T: ToSocketAddrs + Send + 'static>(address: T, handler: Box<EventHa
 
     // New connection thread
     let epfd3 = epfd.clone();
+    let sockets2 = sockets.clone();
     thread::Builder::new()
         .name("TCP Incoming Listener".to_string())
         .spawn(move || {
-            epoll_wait_loop(epfd2, tx_ep_event);
+            listen(address, epfd3, sockets2);
         }).unwrap();
 }
 
@@ -92,7 +97,7 @@ fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
                         let socket_ptr;
                         // Add to master list
                         { // Begin Mutex lock
-                            let mut guard = match socket.lock() {
+                            let mut guard = match sockets.lock() {
                                 Ok(guard) => guard,
                                 Err(poisoned) => {
                                     warn!("SocketList Mutex failed, using anyway...");
@@ -107,7 +112,7 @@ fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
                         // Add to epoll
                         let sfd = socket.raw_fd();
                         let mut event = EpollEvent {
-                            data: socket_ptr,
+                            data: socket_ptr as u64,
                             events: EVENTS
                         };
                         match epoll::ctl(epfd, ctl_op::ADD, sfd, &mut event) {
@@ -124,16 +129,6 @@ fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
     drop(listener);
 }
 
-fn create_epoll_instance() -> RawFd {
-    let result = epoll::create1(0);
-    if result.is_err() {
-        let err = result.unwrap_err();
-        error!("Unable to create epoll instance: {}", err);
-        panic!()
-    }
-    result.unwrap();
-}
-
 fn epoll_wait_loop(epfd: RawFd, tx_handler: Sender<EpollEvent>) {
     // Maximum number of events we want to be notified of at one time
     let mut events = Vec::<EpollEvent>::with_capacity(100);
@@ -143,7 +138,7 @@ fn epoll_wait_loop(epfd: RawFd, tx_handler: Sender<EpollEvent>) {
         match epoll::wait(epfd, &mut events[..], -1) {
             Ok(num_events) => {
                 for x in 0..num_events as usize {
-                    tx_handler.send(events[x]);
+                    let _ = tx_handler.send(events[x]);
                 }
             }
             Err(e) => {
@@ -152,7 +147,6 @@ fn epoll_wait_loop(epfd: RawFd, tx_handler: Sender<EpollEvent>) {
             }
         }
     }
-    info!("epoll_wait thread finished");
 }
 
 fn epoll_event_handler(epfd: RawFd,
@@ -167,69 +161,94 @@ fn epoll_event_handler(epfd: RawFd,
     let mut pool = ResourcePool::new();
 
     for event in rx.iter() {
-        // Pull out the socket
+        // Get a pointer to the socket in the list
         let socket;
         { // Begin Mutex lock
-            let mut guard = match sockets.lock() {
+            let _ = match sockets.lock() {
                 Ok(guard) => guard,
                 Err(poisoned) => {
                     warn!("SocketList Mutex failed, using anyway...");
                     poisoned.into_inner()
                 }
             };
-            let socket_ptr = event.data as *mut Socket;
-            unsafe { socket = *socket_ptr.clone(); }
+            socket = event.data as *mut Socket;
         } // End Mutex lock
 
-        if event.events & DROP_EVENT {
+        if (event.events & DROP_EVENT) > 0 {
             let t_epfd = epfd.clone();
-            let socketfd = socket.raw_fd();
             let socket_list = sockets.clone();
             let t_handler = handler.clone();
+            let socketfd = unsafe { (*socket).raw_fd() };
+            let socketid = unsafe { (*socket).id() };
+
             pool.run(move || {
                 epoll_remove_fd(t_epfd, socketfd);
-                remove_socket_from_list(socket, socket_list);
+                remove_socket_from_list(socketid, socket_list.clone());
+                { // EventHandler Mutex locked
+                    let mut guard = match t_handler.lock() {
+                        Ok(guard) => guard,
+                        Err(poisoned) => {
+                            warn!("EventHandler Mutex failed, using anyway...");
+                            poisoned.into_inner()
+                        }
+                    };
+                    let e_handler = guard.deref_mut();
+                    e_handler.on_socket_closed(socketid);
+                } // EventHandler Mutex unlocked
             });
-        } else if event.events & READ_EVENT {
+        } else if (event.events & READ_EVENT) > 0 {
             let t_epfd = epfd.clone();
-            let socketfd = socket.raw_fd();
+            let mut s_clone = unsafe { (*socket).clone() };
+            let socketfd = s_clone.raw_fd();
+            let s_ptr_clone = socket.clone() as *const Socket;
             let socket_list = sockets.clone();
             let t_handler = handler.clone();
+
             pool.run(move || {
-                match socket.read() {
+                match s_clone.read() {
                     Ok(_) => {
-                        for msg in socket.buffer().iter() {
+                        for msg in s_clone.buffer().iter() {
                             let debug_msg = msg.clone();
                             match String::from_utf8(debug_msg) {
                                 Ok(msg_str) => trace!("msg: {}", msg_str),
                                 Err(_) => trace!("msg not UTF-8")
                             };
 
-                            { // Mutex locked
+                            { // EventHandler Mutex locked
                                 let mut guard = match t_handler.lock() {
                                     Ok(guard) => guard,
                                     Err(poisoned) => {
-                                        warn!("SocketList Mutex failed, using anyway...");
+                                        warn!("EventHandler Mutex failed, using anyway...");
                                         poisoned.into_inner()
                                     }
                                 };
                                 let e_handler = guard.deref_mut();
-                                e_handler.on_data_received(socket, socket_list, msg.clone());
-                            } // Mutex unlocked
+                                e_handler.on_data_received(s_clone.clone(),
+                                    socket_list.clone(), msg.clone());
+                            } // EventHandler Mutex unlocked
 
                             // Track message received event and num bytes received
                             stats::msg_recv();
                             stats::bytes_recv(msg.len());
 
-                            // TODO - Add socket fd back to epoll
+                            // Add socket's fd back to epoll watch list
+                            // let mut event = EpollEvent {
+                            //     data: s_ptr_clone as u64,
+                            //     events: EVENTS
+                            // };
+                            // match epoll::ctl(t_epfd.clone(), ctl_op::MOD, socketfd, &mut event) {
+                            //     Ok(_) => trace!("Socket back in epoll list"),
+                            //     Err(e) => warn!("Epoll CtrlError during mod: {}", e)
+                            // };
                         }
                     }
                     Err(e) => {
                         debug!("Error reading socket: {}", e);
                         // We really don't care what happened, it all results in the same
                         // outcome - remove the socket from system...
+                        let s_id = s_clone.id();
                         epoll_remove_fd(t_epfd, socketfd);
-                        remove_socket_from_list(socket, socket_list);
+                        remove_socket_from_list(s_id, socket_list.clone());
                         let mut guard = match t_handler.lock() {
                             Ok(guard) => guard,
                             Err(poisoned) => {
@@ -238,7 +257,7 @@ fn epoll_event_handler(epfd: RawFd,
                             }
                         };
                         let e_handler = guard.deref_mut();
-                        e_handler.on_socket_closed(socket.id());
+                        e_handler.on_socket_closed(s_id);
                     }
                 };
             });
@@ -278,7 +297,7 @@ fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
 }
 
 /// Removes socket_ids from master list
-fn remove_socket_from_list(socket: Socket, sockets: SocketList) {
+fn remove_socket_from_list(socket_id: u32, sockets: SocketList) {
     debug!("remove_socket_from_list");
 
     let mut s_guard = match sockets.lock() {
@@ -293,7 +312,7 @@ fn remove_socket_from_list(socket: Socket, sockets: SocketList) {
     let mut s_found = false;
     let mut index = 1usize;
     for s in s_list.iter() {
-        if s.id() == socket.id() {
+        if s.id() == socket_id {
             s_found = true;
             break;
         }

@@ -6,7 +6,7 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use types::*;
 use socket::Socket;
@@ -58,12 +58,12 @@ impl ResourcePool {
     }
 
     /// Runs the passed function
-    pub fn run<T: FnOnce() + Send + Sync + 'static>(&mut self, task: T) {
+    pub fn run<T: FnMut() + Send + Sync + 'static>(&mut self, task: T) {
         if self.next_worker == self.w_threads.len() {
             self.next_worker = 0;
         }
 
-        let _ = self.w_threads[self.next_worker].sender().send(task);
+        self.w_threads[self.next_worker].sender().send(Arc::new(Mutex::new(task)));
         self.next_worker += 1;
     }
 }
