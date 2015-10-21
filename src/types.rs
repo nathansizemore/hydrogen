@@ -25,3 +25,6 @@ pub type SocketList = Arc<Mutex<LinkedList<Socket>>>;
 
 /// Thread safe EventHandler
 pub type SafeHandler = Arc<Mutex<EventHandler>>;
+
+/// FnOnce signature for EventHandler on_data_received fn
+pub type EventHandlerFn = FnOnce() + Send + Sync + 'static;

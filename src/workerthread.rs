@@ -17,7 +17,7 @@ use socket::Socket;
 
 pub struct WorkerThread {
     /// Sender to this threads receiver
-    tx: Sender<(EventFunction, SocketList, Socket, Vec<u8>)>
+    tx: Sender<EventHandlerFn>
 }
 
 
@@ -25,31 +25,19 @@ impl WorkerThread {
 
     /// Creates a new worker thread
     pub fn new() -> WorkerThread {
-        let (tx, rx): (
-            Sender<(EventFunction, SocketList, Socket, Vec<u8>)>,
-            Receiver<(EventFunction, SocketList, Socket, Vec<u8>)>)
-            = channel();
-
+        let (tx, rx): (Sender<EventHandlerFn>, Receiver<EventHandlerFn>) = channel();
         thread::Builder::new()
             .name("WorkerThread".to_string())
             .spawn(move || {
                 WorkerThread::start(rx);
             }).unwrap();
 
-        WorkerThread {
-            tx: tx
-        }
+        WorkerThread { tx: tx }
     }
 
     /// Returns a clone of this thread's Sender<T>
-    pub fn sender(&self) -> Sender<(EventFunction, SocketList, Socket, Vec<u8>)> {
-        self.tx.clone()
-    }
+    pub fn sender(&self) -> Sender<EventHandlerFn> { self.tx.clone() }
 
     /// Starts the worker thread
-    fn start(rx: Receiver<(EventFunction, SocketList, Socket, Vec<u8>)>) {
-        for (task, sockets, socket, buffer) in rx.iter() {
-            (*task)(sockets, socket, buffer);
-        }
-    }
+    fn start(rx: Receiver<EventHandlerFn>) { for task in rx.iter() { task(); } }
 }

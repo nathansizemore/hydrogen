@@ -18,9 +18,6 @@ extern crate num_cpus;
 extern crate epoll;
 extern crate rustc_serialize;
 
-//#[cfg(target_os = "linux")]
-pub mod server;
-pub mod connectionloop;
 pub mod epollloop;
 pub mod resources;
 pub mod socket;

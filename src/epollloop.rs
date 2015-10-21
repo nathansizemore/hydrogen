@@ -8,7 +8,7 @@
 
 use std::thread;
 use std::thread::JoinHandle;
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::ops::DerefMut;
 use std::os::unix::io::RawFd;
 use std::collections::LinkedList;
@@ -28,7 +28,20 @@ use stats;
 use types::*;
 use socket::Socket;
 use ipc::*;
+use resources::ResourcePool;
 
+
+// When added to epoll, these will be the conditions of kernel notification:
+//
+// EPOLLIN      - Available for read
+// EPOLLRDHUP   - Connection has been closed
+// EPOLLONESHOT - After an event has been received, and reported, do not track
+//                further changes until explicitly told to do so.
+const EVENTS: u32 = (
+    event_type::EPOLLET | // Set fd to EdgeTrigger mode
+    event_type::EPOLLIN |
+    event_type::EPOLLRDHUP |
+    event_type::EPOLLONESHOT);
 
 
 pub fn begin<T: ToSocketAddrs + Send + 'static>(address: T, handler: Box<EventHandler>) {
@@ -67,18 +80,6 @@ pub fn begin<T: ToSocketAddrs + Send + 'static>(address: T, handler: Box<EventHa
 }
 
 fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
-    // When added to epoll, these will be the conditions of kernel notification:
-    //
-    // EPOLLIN      - Available for read
-    // EPOLLRDHUP   - Connection has been closed
-    // EPOLLONESHOT - After an event has been received, and reported, do not track
-    //                further changes until explicitly told to do so.
-    const EVENTS: u32 = (
-        event_type::EPOLLET | // Set this fd to EdgeTrigger mode
-        event_type::EPOLLIN |
-        event_type::EPOLLRDHUP |
-        event_type::EPOLLONESHOT);
-
     let listener = TcpListener::bind(address).unwrap();
     for stream in listener.incoming() {
         match stream {
@@ -169,7 +170,7 @@ fn epoll_event_handler(epfd: RawFd,
         // Pull out the socket
         let socket;
         { // Begin Mutex lock
-            let mut guard = match socket.lock() {
+            let mut guard = match sockets.lock() {
                 Ok(guard) => guard,
                 Err(poisoned) => {
                     warn!("SocketList Mutex failed, using anyway...");
@@ -181,18 +182,63 @@ fn epoll_event_handler(epfd: RawFd,
         } // End Mutex lock
 
         if event.events & DROP_EVENT {
-            epoll_remove_fd(epfd.clone(), socket.raw_fd());
-            remove_socket_from_list(socket, sockets.clone());
-
-            let t_handler.clone();
-            thread::spawn(move || {
-
-            });
-            continue;
-        } else if event.events & READ_EVENT {
+            let t_epfd = epfd.clone();
+            let socketfd = socket.raw_fd();
+            let socket_list = sockets.clone();
             let t_handler = handler.clone();
-            thread::spawn(move || {
-                let guard =
+            pool.run(move || {
+                epoll_remove_fd(t_epfd, socketfd);
+                remove_socket_from_list(socket, socket_list);
+            });
+        } else if event.events & READ_EVENT {
+            let t_epfd = epfd.clone();
+            let socketfd = socket.raw_fd();
+            let socket_list = sockets.clone();
+            let t_handler = handler.clone();
+            pool.run(move || {
+                match socket.read() {
+                    Ok(_) => {
+                        for msg in socket.buffer().iter() {
+                            let debug_msg = msg.clone();
+                            match String::from_utf8(debug_msg) {
+                                Ok(msg_str) => trace!("msg: {}", msg_str),
+                                Err(_) => trace!("msg not UTF-8")
+                            };
+
+                            { // Mutex locked
+                                let mut guard = match t_handler.lock() {
+                                    Ok(guard) => guard,
+                                    Err(poisoned) => {
+                                        warn!("SocketList Mutex failed, using anyway...");
+                                        poisoned.into_inner()
+                                    }
+                                };
+                                let e_handler = guard.deref_mut();
+                                e_handler.on_data_received(socket, socket_list, msg.clone());
+                            } // Mutex unlocked
+
+                            // Track message received event and num bytes received
+                            stats::msg_recv();
+                            stats::bytes_recv(msg.len());
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Error reading socket: {}", e);
+                        // We really don't care what happened, it all results in the same
+                        // outcome - remove the socket from system...
+                        epoll_remove_fd(t_epfd, socketfd);
+                        remove_socket_from_list(socket, socket_list);
+                        let mut guard = match t_handler.lock() {
+                            Ok(guard) => guard,
+                            Err(poisoned) => {
+                                warn!("SocketList Mutex failed, using anyway...");
+                                poisoned.into_inner()
+                            }
+                        };
+                        let e_handler = guard.deref_mut();
+                        e_handler.on_socket_closed(socket.id());
+                    }
+                };
             });
         } else { warn!("Unknown epoll event received: {}", event.data); continue; }
     }
@@ -229,218 +275,40 @@ fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
     };
 }
 
-impl EpollLoop {
+/// Removes socket_ids from master list
+fn remove_socket_from_list(socket: Socket, sockets: SocketList) {
+    debug!("remove_socket_from_list");
 
-
-    /// Starts the loop listening for new accepted incoming connections
-    fn start_new_conn_listener(rx: Receiver<TcpStream>, tx_handler: Sender<EventTuple>) {
-        // Master socket list
-        let sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
-
-        // Our error handler for this thread and it's children
-        let (err_tx, err_rx): (Sender<()>, Receiver<()>) = channel();
-
-        // Create an epoll instance
-        let result = epoll::create1(0);
-        if result.is_err() {
-            let err = result.unwrap_err();
-            error!("Unable to create epoll instance: {}", err);
-            panic!()
+    let mut s_guard = match sockets.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            warn!("SocketList Mutex was poisoned, using anyway");
+            poisoned.into_inner()
         }
-        let epoll_instance = result.unwrap();
+    };
+    let s_list = s_guard.deref_mut();
 
-        // Start the epoll thread
-        let c_sockets = sockets.clone();
-        let c_epoll_instance = epoll_instance.clone();
-        thread::Builder::new()
-            .name("Epoll Wait Loop".to_string())
-            .spawn(move || {
-                EpollLoop::epoll_loop(tx_handler, c_sockets, c_epoll_instance, err_rx);
-            }).unwrap();
-
-        for new_stream in rx.iter() {
-            match NbetStream::new(new_stream) {
-                Ok(s_stream) => {
-                    trace!("New stream received in epoll.new_stream.rx");
-
-                    // Add to master list
-                    let socket = Socket::new(s_stream);
-                    let mut s_guard = match sockets.lock() {
-                        Ok(guard) => guard,
-                        Err(poisoned) => {
-                            warn!("SocketList Mutex was poisoned, using anyway");
-                            poisoned.into_inner()
-                        }
-                    };
-                    let s_list = s_guard.deref_mut();
-                    let s_fd = socket.raw_fd();
-                    s_list.push_back(socket);
-
-                    trace!("socket added to master list");
-
-                    // Track the new connection
-                    stats::conn_recv();
-
-                    // Add to epoll and notify us when any of the following conditions are met:
-                    //
-                    // EPOLLIN      - Available for read
-                    // EPOLLRDHUP   - Connection has been closed
-                    // EPOLLONESHOT - After an event has been received, and reported, do not track
-                    //                further changes until explicitly told to do so.
-                    let events: u32 = (
-                        event_type::EPOLLET | // Set this fd to EdgeTrigger mode
-                        event_type::EPOLLIN |
-                        event_type::EPOLLRDHUP |
-                        event_type::EPOLLONESHOT);
-
-                    let mut event = EpollEvent {
-                        data: s_fd as u64,
-                        events: events
-                    };
-                    match epoll::ctl(epoll_instance, ctl_op::ADD, s_fd, &mut event) {
-                        Ok(()) => trace!("New socket added to epoll list"),
-                        Err(e) => warn!("Epoll CtrlError during add: {}", e)
-                    };
-                }
-                Err(e) => warn!("Unable to create NbetStream: {}", e)
-            };
+    let mut s_found = false;
+    let mut index = 1usize;
+    for s in s_list.iter() {
+        if s.id() == socket.id() {
+            s_found = true;
+            break;
         }
-
-        // If we get here, shit is real bad. It means we have lost our
-        // channel to the outside world.
-        // Kill off event loop, so unwinding can begin
-        error!("EpollLoop::start() thread ended unexpectedly");
-        let _ = err_tx.send(());
+        index += 1;
     }
 
-    /// Processes a read on the socket that is ready for reading
-    ///
-    /// An epoll event is passed to this function, with the fd that is ready to be read
-    /// A traversal through the list of sockets is then performed in order to locate the
-    /// NbetStream instance that is wrapping that file descriptor.
-    /// After a read is performed on that socket, it's data will be passed back to the
-    /// "user-space" section of the Server to process the payload however it needs to.
-    ///
-    /// TODO - Create a faster way to gain a safe reference to the NbetStream wrapping
-    /// the fd instead of an O(n) lookup for every event. Currently lookup time is
-    /// O(n) * MAX_EPOLL_EVENTS, where MAX_EPOLL_EVENTS is user defined in this function's
-    /// caller.
-    fn handle_epoll_event(epoll_instance: RawFd,
-                          event: &EpollEvent,
-                          sockets: SocketList,
-                          uspace_tx: Sender<EventTuple>) {
+    if !s_found { return; }
 
-        trace!("handle_epoll_event");
-
-        // List of socket id's that produced an Err on read attempt
-        // Cannot do it within the match block because the list will need
-        // access to the mutex while this scope has the mutex, which will result
-        // in a spinlock that will spin forever. And, that's a trip to bummer town
-        let mut errd_socket_ids = Vec::<u32>::new();
-
-        // The fd we are traversing the list for
-        let fd = event.data;
-
-        // We need a handle before the list gets locked and used
-        let s_list_clone = sockets.clone();
-
-        // TODO - Replace with recoverable version once into_inner() is stable
-        // Unfortunately, this is the only stable way to use mutexes at the moment
-        // Hopefully recovering from poisoning will be in 1.2
-        // let mut s_guard = match sockets.lock() {
-        //     Ok(guard) => guard,
-        //     Err(poisoned) => poisoned.into_inner()
-        // };
-        let mut s_guard = sockets.lock().unwrap();
-        let mut s_list = s_guard.deref_mut();
-        for socket in s_list.iter_mut() {
-            if socket.raw_fd() as u64 == fd {
-                // We've found the socket for the event passed from epoll
-                // Lets attempt to read from it
-                match socket.read() {
-                    Ok(()) => {
-                        trace!("socket.read.Ok()");
-                        for msg in socket.buffer().iter() {
-                            let msg_for_debug = msg.clone();
-                            match String::from_utf8(msg_for_debug) {
-                                Ok(msg_str) => debug!("msg_as_string: {}", msg_str),
-                                Err(e) => {
-                                    // TODO - Determine if all things must be valid UTF-8
-                                    // Potentially, bitbanging could be used which would
-                                    // produce invalid UTF-8.
-                                    //
-                                    // For now, it just prints a warning
-                                    warn!("Error converting to UTF-8: {}", e)
-                                }
-                            };
-
-                            let list_handle = s_list_clone.clone();
-                            let socket_clone = socket.clone();
-                            let msg_clone = msg.clone();
-
-                            trace!("Sending to user space from epoll loop");
-
-                            let _ = uspace_tx.send((list_handle, socket_clone, msg_clone));
-
-                            // Track message received event and num bytes received
-                            // stats::msg_recv();
-                            // stats::bytes_recv(msg.len());
-                        }
-                    }
-                    Err(e) => {
-                        debug!("Error reading socket: {}", e);
-                        // We really don't care what happened, it all results in the same
-                        // outcome - remove the socket from system...
-                        errd_socket_ids.push(socket.id());
-                        let s_clone = socket.clone();
-                        let epfd_clone = epoll_instance.clone();
-                        EpollLoop::remove_socket_from_epoll(s_clone, epfd_clone);
-                    }
-                }
-            }
-        }
-
-        // Remove any errd sockets from the master list of sockets
-        EpollLoop::remove_sockets_from_list(errd_socket_ids, &mut s_list);
+    if index == 1 {
+        s_list.pop_front();
+    } else {
+        let mut split = s_list.split_off(index - 1);
+        split.pop_front();
+        s_list.append(&mut split);
     }
 
-    /// Removes socket from the epoll watch list
-    fn remove_socket_from_epoll(socket: Socket, epoll_instance: RawFd) {
+    stats::conn_lost();
 
-    }
-
-    /// Removes socket_ids from master list
-    fn remove_sockets_from_list(socket_ids: Vec<u32>, sockets: &mut LinkedList<Socket>) {
-        debug!("remove_sockets_from_list");
-
-        for socket_id in socket_ids.iter() {
-            let mut socket_found = false;
-            let mut index: usize = 1;
-            for socket in sockets.iter() {
-                if socket.id() == *socket_id {
-                    socket_found = true;
-                    break;
-                }
-                index += 1;
-            }
-
-            if !socket_found {
-                debug!("Socket not found in list...?");
-                continue;
-            }
-
-            if index == 1 {
-                sockets.pop_front();
-            } else {
-                let mut split = sockets.split_off(index - 1);
-                split.pop_front();
-                sockets.append(&mut split);
-            }
-
-            // Track the disconnect
-            stats::conn_lost();
-
-            debug!("Socket removed sucessfully");
-        }
-    }
+    trace!("socket removed from list");
 }

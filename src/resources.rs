@@ -58,15 +58,12 @@ impl ResourcePool {
     }
 
     /// Runs the passed function
-    pub fn run(&mut self, fn_ptr: EventFunction,
-               sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
+    pub fn run<T: FnOnce() + Send + Sync + 'static>(&mut self, task: T) {
         if self.next_worker == self.w_threads.len() {
             self.next_worker = 0;
         }
 
-        let _ = self.w_threads[self.next_worker].sender().send((
-            fn_ptr, sockets, socket, buffer
-        ));
+        let _ = self.w_threads[self.next_worker].sender().send(task);
         self.next_worker += 1;
     }
 }
