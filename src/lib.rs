@@ -30,7 +30,7 @@ mod types;
 mod workerthread;
 
 
-/// Starts the server bindind to the passed address.
+/// Starts the server binding to the passed address.
 /// This is a blocking call for the life of the server.
 pub fn begin<T, K>(address: T, handler: Box<K>) where
     T: ToSocketAddrs + Send + 'static,
