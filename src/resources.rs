@@ -8,11 +8,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use types::*;
-use socket::Socket;
+use num_cpus;
 use workerthread::WorkerThread;
-
-use super::num_cpus;
 
 
 /// Provides access to and manages worker threads
@@ -63,7 +60,7 @@ impl ResourcePool {
             self.next_worker = 0;
         }
 
-        self.w_threads[self.next_worker].sender().send(Arc::new(Mutex::new(task)));
+        let _ = self.w_threads[self.next_worker].sender().send(Arc::new(Mutex::new(task)));
         self.next_worker += 1;
     }
 }

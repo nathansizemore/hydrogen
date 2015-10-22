@@ -14,22 +14,41 @@ extern crate libc;
 extern crate rand;
 extern crate simple_stream;
 extern crate num_cpus;
-//#[cfg(target_os = "linux")]
 extern crate epoll;
 extern crate rustc_serialize;
 
-pub mod epollloop;
-pub mod resources;
-pub mod socket;
-pub mod stats;
-pub mod types;
-pub mod workerthread;
-pub mod ipc;
+use std::sync::Mutex;
+use std::net::ToSocketAddrs;
+
+use types::*;
+
+mod epollloop;
+mod resources;
+mod socket;
+mod stats;
+mod types;
+mod workerthread;
 
 
+/// Starts the server bindind to the passed address.
+/// This is a blocking call for the life of the server.
+pub fn begin<T, K>(address: T, handler: Box<K>) where
+    T: ToSocketAddrs + Send + 'static,
+    K: EventHandler + Send + Sync + 'static {
 
-#[no_mangle]
-pub extern "C" fn hydrogen_init() {
+    // Logger
+    initialize_logger();
+
+    // Data collection
+    let mut data = Mutex::new(stats::GeneralData::new());
+    stats::init(&mut data);
+
+    // Begin server
+    epollloop::begin(address, handler);
+}
+
+/// Initializes the global logger
+fn initialize_logger() {
     let _ = fern::init_global_logger(fern::DispatchConfig {
         format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
             format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
@@ -37,5 +56,5 @@ pub extern "C" fn hydrogen_init() {
         output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
         level: log::LogLevelFilter::Trace,
     }, log::LogLevelFilter::Trace);
-    info!("Initialized. \nLog file: /var/log/hydrogen.log");
+    info!("Logger initialized. \nLog file: /var/log/hydrogen.log");
 }

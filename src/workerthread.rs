@@ -7,13 +7,10 @@
 
 
 use std::thread;
-use std::thread::JoinHandle;
-use std::sync::Arc;
 use std::ops::DerefMut;
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{Sender, Receiver, channel};
 
 use types::*;
-use socket::Socket;
 
 
 pub struct WorkerThread {
@@ -42,7 +39,12 @@ impl WorkerThread {
     /// Starts the worker thread
     fn start(rx: Receiver<EventHandlerFn>) {
         for t in rx.iter() {
-            
+            let mut guard = match t.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner()
+            };
+            let task = guard.deref_mut();
+            task();
         }
     }
 }

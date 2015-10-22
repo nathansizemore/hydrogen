@@ -7,6 +7,7 @@
 
 
 //! Socket module
+#![allow(dead_code)]
 
 
 use std::os::unix::io::RawFd;

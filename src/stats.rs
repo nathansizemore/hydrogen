@@ -36,6 +36,7 @@
 //! }
 //!
 
+#![allow(dead_code)]
 
 use std::str;
 use std::str::FromStr;
@@ -201,6 +202,7 @@ pub fn init(data_ref: &mut Mutex<GeneralData>) {
         data = data_ref;
         start_time = time::precise_time_s();
     }
+    info!("data module initialized");
 }
 
 /// Increments num_clients

@@ -77,11 +77,14 @@ pub fn begin<T, K>(address: T, handler: Box<K>) where
     // New connection thread
     let epfd3 = epfd.clone();
     let sockets2 = sockets.clone();
-    thread::Builder::new()
+    let prox = thread::Builder::new()
         .name("TCP Incoming Listener".to_string())
         .spawn(move || {
             listen(address, epfd3, sockets2);
         }).unwrap();
+
+    // Stay alive forever
+    let _ = prox.join();
 }
 
 fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
@@ -200,9 +203,9 @@ fn epoll_event_handler(epfd: RawFd,
             let t_epfd = epfd.clone();
             let mut s_clone = unsafe { (*socket).clone() };
             let socketfd = s_clone.raw_fd();
-            let s_ptr_clone = socket.clone() as *const Socket;
             let socket_list = sockets.clone();
             let t_handler = handler.clone();
+            let socket_ptr = socket as u64;
 
             pool.run(move || {
                 match s_clone.read() {
@@ -232,14 +235,14 @@ fn epoll_event_handler(epfd: RawFd,
                             stats::bytes_recv(msg.len());
 
                             // Add socket's fd back to epoll watch list
-                            // let mut event = EpollEvent {
-                            //     data: s_ptr_clone as u64,
-                            //     events: EVENTS
-                            // };
-                            // match epoll::ctl(t_epfd.clone(), ctl_op::MOD, socketfd, &mut event) {
-                            //     Ok(_) => trace!("Socket back in epoll list"),
-                            //     Err(e) => warn!("Epoll CtrlError during mod: {}", e)
-                            // };
+                            let mut event = EpollEvent {
+                                data: socket_ptr,
+                                events: EVENTS
+                            };
+                            match epoll::ctl(t_epfd.clone(), ctl_op::MOD, socketfd, &mut event) {
+                                Ok(_) => trace!("Socket back in epoll list"),
+                                Err(e) => warn!("Epoll CtrlError during mod: {}", e)
+                            };
                         }
                     }
                     Err(e) => {
