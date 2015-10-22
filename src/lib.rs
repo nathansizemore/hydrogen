@@ -22,11 +22,12 @@ use std::net::ToSocketAddrs;
 
 use types::*;
 
+pub mod types;
+pub mod socket;
+
+mod stats;
 mod epollloop;
 mod resources;
-mod socket;
-mod stats;
-mod types;
 mod workerthread;
 
 
