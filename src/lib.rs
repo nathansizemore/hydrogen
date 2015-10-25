@@ -57,5 +57,6 @@ fn initialize_logger() {
         output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
         level: log::LogLevelFilter::Trace,
     }, log::LogLevelFilter::Trace);
+
     info!("Logger initialized. \nLog file: /var/log/hydrogen.log");
 }
