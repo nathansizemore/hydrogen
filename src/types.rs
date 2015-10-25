@@ -15,8 +15,8 @@ use std::collections::LinkedList;
 use socket::Socket;
 
 pub trait EventHandler {
-    fn on_data_received(&self, sender: Socket, sockets: SocketList, buffer: Vec<u8>);
-    fn on_socket_closed(&self, id: u32);
+    fn on_data_received(&mut self, sender: Socket, sockets: SocketList, buffer: Vec<u8>);
+    fn on_socket_closed(&mut self, id: u32);
 }
 
 /// Thread LinkedList<Socket>
