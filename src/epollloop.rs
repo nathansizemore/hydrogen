@@ -250,7 +250,9 @@ fn epoll_event_handler(epfd: RawFd,
                             // lucky for us, Rust sets the CLOEXEC flag for fds, which means that
                             // the system will clean them up when they go out of scope. Also,
                             // epoll removes fds when the system clears them, so we should be OK
-                            // from any internal fd leaks here.
+                            // from any internal fd leaks here. All we really care about, is if
+                            // we receive the EEXIST from the call. In this case, we must apply
+                            // the adjustment as a MOD
                             let mut event = EpollEvent {
                                 data: socket_ptr,
                                 events: EVENTS
@@ -259,10 +261,21 @@ fn epoll_event_handler(epfd: RawFd,
                             match epoll::ctl(t_epfd.clone(), ctl_op::ADD, socketfd, &mut event) {
                                 Ok(_) => trace!("Socket back in epoll list"),
                                 Err(e) => {
-                                    warn!("Epoll CtrlError during mod: {}", e);
-                                    warn!("s.id: {}", s_id);
-                                    warn!("epfd: {}", t_epfd.clone());
-                                    warn!("fd: {}", socketfd);
+                                    if e == CtlError::EEXIST {
+                                        trace!("Fd already exists in epoll, trying ctl::MOD");
+                                        match epoll::ctl(t_epfd.clone(), ctl_op::MOD, socketfd,
+                                            &mut event) {
+                                            Ok(_) => trace!("Socket back in epoll list with mod"),
+                                            Err(_) => {
+                                                warn!("Error modifying socket in epoll...")
+                                            }
+                                        };
+                                    } else {
+                                        warn!("Epoll CtrlError during mod: {}", e);
+                                        warn!("s.id: {}", s_id);
+                                        warn!("epfd: {}", t_epfd.clone());
+                                        warn!("fd: {}", socketfd);
+                                    }
                                 }
                             };
                         }
