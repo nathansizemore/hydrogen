@@ -212,38 +212,6 @@ fn epoll_event_handler(epfd: RawFd,
             let t_handler = handler.clone();
             let socket_ptr = socket as u64;
 
-            trace!("fd test...");
-            trace!("c1.fd: {}", s_clone.raw_fd());
-
-            let c2 = s_clone.clone();
-            trace!("c2.fd: {}", c2.raw_fd());
-
-            // Rust's TcpStream clone method makes use of the F_DUPFD flag for duplicating
-            // file descriptors. This means the fd we currently have associated for this
-            // stream is now worthless within epoll, and why we're grabbing it off of a raw
-            // pointer dereference. Instead of setting it back to listening with ctl::MOD,
-            // we'll remove it and add the new file descriptor given from the system.
-            let orig_fd = unsafe { (*socket).raw_fd() };
-
-            // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
-            // a non-null pointer in event, even though this argument is ignored.
-            // Since Linux 2.6.9, event can be specified as NULL when using
-            // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
-            // before 2.6.9 should specify a non-null pointer in event.
-            let mut event = EpollEvent {
-                data: 0u64,
-                events: 0u32
-            };
-            match epoll::ctl(t_epfd.clone(), ctl_op::DEL, orig_fd, &mut event) {
-                Ok(_) => trace!("Socket removed from epoll list"),
-                Err(e) => {
-                    warn!("Epoll CtrlError during mod: {}", e);
-                    warn!("s.id: {}", unsafe { (*socket).id() });
-                    warn!("epfd: {}", t_epfd.clone());
-                    warn!("fd: {}", socketfd);
-                }
-            };
-
             pool.run(move || {
                 match s_clone.read() {
                     Ok(_) => {
@@ -271,7 +239,18 @@ fn epoll_event_handler(epfd: RawFd,
                             stats::msg_recv();
                             stats::bytes_recv(msg.len());
 
-                            // Add socket's fd back to epoll watch list
+                            // Add socket's fd to epoll watch list
+                            //
+                            // Rust's TcpStream clone method makes use of the F_DUPFD flag
+                            // for duplicating file descriptors. This means the fd we just read
+                            // from and/or the original fd added to epoll for this stream cannot
+                            // be used to MOD, or DEL and ADD again, in order to re-register for
+                            // the same events, with the same fd.
+                            // The originally added fd is essentially invalid at this point, but
+                            // lucky for us, Rust sets the CLOEXEC flag for fds, which means that
+                            // the system will clean them up when they go out of scope. Also,
+                            // epoll removes fds when the system clears them, so we should be OK
+                            // from any internal fd leaks here.
                             let mut event = EpollEvent {
                                 data: socket_ptr,
                                 events: EVENTS
