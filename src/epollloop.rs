@@ -212,6 +212,12 @@ fn epoll_event_handler(epfd: RawFd,
             let t_handler = handler.clone();
             let socket_ptr = socket as u64;
 
+            trace!("fd test...");
+            trace!("c1.fd: {}", s_clone.raw_fd());
+
+            let c2 = s_clone.clone();
+            trace!("c2.fd: {}", c2.raw_fd());
+
             pool.run(move || {
                 match s_clone.read() {
                     Ok(_) => {
