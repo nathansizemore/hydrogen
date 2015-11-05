@@ -38,7 +38,9 @@ const EVENTS: u32 = (
     event_type::EPOLLET | // Set fd to EdgeTrigger mode
     event_type::EPOLLIN |
     event_type::EPOLLRDHUP |
-    event_type::EPOLLONESHOT);
+    event_type::EPOLLONESHOT |
+    event_type::EPOLLERR |
+    event_type::EPOLLHUP);
 
 pub fn begin<T, K>(address: T, handler: Box<K>) where
     T: ToSocketAddrs + Send + 'static,
