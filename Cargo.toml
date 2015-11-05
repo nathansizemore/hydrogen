@@ -21,12 +21,9 @@ fern = "*"
 log = "*"
 time = "*"
 rustc-serialize = "*"
+epoll = "*"
 
 # From git
-[dependencies.epoll]
-git = "https://github.com/nathansizemore/epoll"
-branch = "develop"
-
 [dependencies.simple-stream]
 git = "https://github.com/nathansizemore/simple-stream"
 branch = "develop"
