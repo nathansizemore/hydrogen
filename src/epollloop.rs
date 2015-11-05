@@ -218,6 +218,32 @@ fn epoll_event_handler(epfd: RawFd,
             let c2 = s_clone.clone();
             trace!("c2.fd: {}", c2.raw_fd());
 
+            // Rust's TcpStream clone method makes use of the F_DUPFD flag for duplicating
+            // file descriptors. This means the fd we currently have associated for this
+            // stream is now worthless within epoll, and why we're grabbing it off of a raw
+            // pointer dereference. Instead of setting it back to listening with ctl::MOD,
+            // we'll remove it and add the new file descriptor given from the system.
+            let orig_fd = unsafe { (*socket).raw_fd() };
+
+            // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
+            // a non-null pointer in event, even though this argument is ignored.
+            // Since Linux 2.6.9, event can be specified as NULL when using
+            // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
+            // before 2.6.9 should specify a non-null pointer in event.
+            let mut event = EpollEvent {
+                data: 0u64,
+                events: 0u32
+            };
+            match epoll::ctl(t_epfd.clone(), ctl_op::DEL, orig_fd, &mut event) {
+                Ok(_) => trace!("Socket removed from epoll list"),
+                Err(e) => {
+                    warn!("Epoll CtrlError during mod: {}", e);
+                    warn!("s.id: {}", unsafe { (*socket).id() });
+                    warn!("epfd: {}", t_epfd.clone());
+                    warn!("fd: {}", socketfd);
+                }
+            };
+
             pool.run(move || {
                 match s_clone.read() {
                     Ok(_) => {
@@ -251,7 +277,7 @@ fn epoll_event_handler(epfd: RawFd,
                                 events: EVENTS
                             };
                             let s_id = s_clone.id();
-                            match epoll::ctl(t_epfd.clone(), ctl_op::MOD, socketfd, &mut event) {
+                            match epoll::ctl(t_epfd.clone(), ctl_op::ADD, socketfd, &mut event) {
                                 Ok(_) => trace!("Socket back in epoll list"),
                                 Err(e) => {
                                     warn!("Epoll CtrlError during mod: {}", e);
