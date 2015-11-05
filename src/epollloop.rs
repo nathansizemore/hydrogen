@@ -119,7 +119,11 @@ fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
                             events: EVENTS
                         };
                         match epoll::ctl(epfd, ctl_op::ADD, sfd, &mut event) {
-                            Ok(()) => trace!("New socket added to epoll list"),
+                            Ok(()) => {
+                                trace!("New socket added to epoll list");
+                                trace!("epfd: {}", epfd);
+                                trace!("fd: {}", sfd);
+                            },
                             Err(e) => warn!("Epoll CtrlError during add: {}", e)
                         };
                     }
@@ -241,7 +245,11 @@ fn epoll_event_handler(epfd: RawFd,
                             };
                             match epoll::ctl(t_epfd.clone(), ctl_op::MOD, socketfd, &mut event) {
                                 Ok(_) => trace!("Socket back in epoll list"),
-                                Err(e) => warn!("Epoll CtrlError during mod: {}", e)
+                                Err(e) => {
+                                    warn!("Epoll CtrlError during mod: {}", e);
+                                    warn!("epfd: {}", t_epfd.clone());
+                                    warn!("fd: {}", socketfd);
+                                }
                             };
                         }
                     }
