@@ -163,7 +163,7 @@ fn epoll_event_handler(epfd: RawFd,
                        handler: SafeHandler) {
     // Types of events we care about
     const READ_EVENT: u32 = event_type::EPOLLIN;
-    const DROP_EVENT: u32 = event_type::EPOLLRDHUP | event_type::EPOLLHUP;
+    const DROP_EVENT: u32 = event_type::EPOLLRDHUP | event_type::EPOLLHUP | event_type::EPOLLERR;
 
     // Thread pool
     let mut pool = ResourcePool::new();
@@ -183,6 +183,7 @@ fn epoll_event_handler(epfd: RawFd,
         } // End Mutex lock
 
         if (event.events & DROP_EVENT) > 0 {
+            trace!("Received drop event");
             let t_epfd = epfd.clone();
             let socket_list = sockets.clone();
             let t_handler = handler.clone();
