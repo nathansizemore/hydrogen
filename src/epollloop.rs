@@ -119,12 +119,11 @@ fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
         } // End Mutex lock
 
         // Add to epoll
-        let sfd = socket.raw_fd();
         let mut event = EpollEvent {
             data: socket_ptr as u64,
             events: EVENTS
         };
-        let _ = epoll::ctl(epfd, ctl_op::ADD, sfd, &mut event).map_err(|e| {
+        let _ = epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut event).map_err(|e| {
             error!("CtrlError during add: {}", e);
         });
     }
