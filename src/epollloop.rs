@@ -91,50 +91,42 @@ pub fn begin<T, K>(address: T, handler: Box<K>) where
 
 fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
     let listener = TcpListener::bind(address).unwrap();
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                trace!("New connection received");
-                // Create new socket
-                match NbetStream::new(stream) {
-                    Ok(nb_stream) => {
-                        let socket = Socket::new(nb_stream);
-                        let socket_ptr;
-                        // Add to master list
-                        { // Begin Mutex lock
-                            let mut guard = match sockets.lock() {
-                                Ok(guard) => guard,
-                                Err(poisoned) => {
-                                    warn!("SocketList Mutex failed, using anyway...");
-                                    poisoned.into_inner()
-                                }
-                            };
-                            let socket_list = guard.deref_mut();
-                            socket_list.push_back(socket.clone());
-                            socket_ptr = socket_list.back_mut().unwrap() as *mut Socket;
-                        } // End Mutex lock
-
-                        // Add to epoll
-                        let sfd = socket.raw_fd();
-                        let mut event = EpollEvent {
-                            data: socket_ptr as u64,
-                            events: EVENTS
-                        };
-                        match epoll::ctl(epfd, ctl_op::ADD, sfd, &mut event) {
-                            Ok(()) => {
-                                trace!("New socket added to epoll list");
-                                trace!("socket.id: {}", socket.id());
-                                trace!("epfd: {}", epfd);
-                                trace!("fd: {}", sfd);
-                            },
-                            Err(e) => warn!("Epoll CtrlError during add: {}", e)
-                        };
-                    }
-                    Err(e) => warn!("Error creating nbstream: {}", e)
-                }
-            }
-            Err(e) => warn!("Error encountered during TCP connection: {}", e)
+    for connection in listener.incoming() {
+        if connection.is_err() {
+            warn!("Error encountered during TCP connection: {}", connection.unwrap_err());
+            continue;
         }
+
+        let result = NbetStream::new(connection.unwrap());
+        if result.is_err() {
+            warn!("Error creating nbstream: {:?}", result.unwrap_err());
+            continue;
+        }
+
+        let socket_ptr;
+        let socket = Socket::new(result.unwrap());
+        { // Begin Mutex lock
+            let mut guard = match sockets.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("SocketList Mutex failed, using anyway...");
+                    poisoned.into_inner()
+                }
+            };
+            let socket_list = guard.deref_mut();
+            socket_list.push_back(socket.clone());
+            socket_ptr = socket_list.back_mut().unwrap() as *mut Socket;
+        } // End Mutex lock
+
+        // Add to epoll
+        let sfd = socket.raw_fd();
+        let mut event = EpollEvent {
+            data: socket_ptr as u64,
+            events: EVENTS
+        };
+        let _ = epoll::ctl(epfd, ctl_op::ADD, sfd, &mut event).map_err(|e| {
+            error!("CtrlError during add: {}", e);
+        });
     }
     drop(listener);
 }
