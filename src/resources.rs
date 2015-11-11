@@ -55,7 +55,7 @@ impl ResourcePool {
     }
 
     /// Runs the passed function
-    pub fn run<T: FnMut() + Send + Sync + 'static>(&mut self, task: T) {
+    pub fn run<T: Fn() + Send + Sync + 'static>(&mut self, task: T) {
         if self.next_worker == self.w_threads.len() {
             self.next_worker = 0;
         }

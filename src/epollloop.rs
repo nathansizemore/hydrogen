@@ -120,7 +120,7 @@ fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
 
         // Add to epoll
         let mut event = EpollEvent {
-            data: socket_ptr as u64,
+            data: (socket_ptr as usize) as u64,
             events: EVENTS
         };
         let _ = epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut event).map_err(|e| {
@@ -163,7 +163,7 @@ fn epoll_event_handler(epfd: RawFd,
 
     for event in rx.iter() {
         // Get a pointer to the socket in the list
-        let socket;
+        let socket_ptr;
         { // Begin Mutex lock
             let _ = match sockets.lock() {
                 Ok(guard) => guard,
@@ -172,129 +172,107 @@ fn epoll_event_handler(epfd: RawFd,
                     poisoned.into_inner()
                 }
             };
-            socket = event.data as *mut Socket;
+            socket_ptr = event.data as *mut Socket;
         } // End Mutex lock
 
+        // Move semantics are a little weird right here, so we must use clones of clones
+        // in order to make the compiler happy
         if (event.events & DROP_EVENT) > 0 {
-            trace!("Received drop event");
-            let t_epfd = epfd.clone();
-            let socket_list = sockets.clone();
             let t_handler = handler.clone();
-            let socketfd = unsafe { (*socket).raw_fd() };
-            let socketid = unsafe { (*socket).id() };
-
+            let socket_list = sockets.clone();
+            let socket = unsafe { (*socket_ptr).clone() };
             pool.run(move || {
-                epoll_remove_fd(t_epfd, socketfd);
-                remove_socket_from_list(socketid, socket_list.clone());
-                { // EventHandler Mutex locked
-                    let mut guard = match t_handler.lock() {
-                        Ok(guard) => guard,
-                        Err(poisoned) => {
-                            warn!("EventHandler Mutex failed, using anyway...");
-                            poisoned.into_inner()
-                        }
-                    };
-                    let e_handler = guard.deref_mut();
-                    e_handler.on_socket_closed(socketid);
-                } // EventHandler Mutex unlocked
+                handle_drop_event(epfd, socket.clone(), socket_list.clone(), t_handler.clone());
             });
         } else if (event.events & READ_EVENT) > 0 {
-            let t_epfd = epfd.clone();
-            let mut s_clone = unsafe { (*socket).clone() };
-            let socketfd = s_clone.raw_fd();
-            let socket_list = sockets.clone();
             let t_handler = handler.clone();
-            let socket_ptr = socket as u64;
-
+            let socket_list = sockets.clone();
+            let socket = unsafe { (*socket_ptr).clone() };
+            let ptr_addr = socket_ptr as usize;
             pool.run(move || {
-                match s_clone.read() {
-                    Ok(_) => {
-                        for msg in s_clone.buffer().iter() {
-                            let debug_msg = msg.clone();
-                            match String::from_utf8(debug_msg) {
-                                Ok(msg_str) => trace!("msg: {}", msg_str),
-                                Err(_) => trace!("msg not UTF-8")
-                            };
-
-                            { // EventHandler Mutex locked
-                                let mut guard = match t_handler.lock() {
-                                    Ok(guard) => guard,
-                                    Err(poisoned) => {
-                                        warn!("EventHandler Mutex failed, using anyway...");
-                                        poisoned.into_inner()
-                                    }
-                                };
-                                let e_handler = guard.deref_mut();
-                                e_handler.on_data_received(s_clone.clone(),
-                                    socket_list.clone(), msg.clone());
-                            } // EventHandler Mutex unlocked
-
-                            // Track message received event and num bytes received
-                            stats::msg_recv();
-                            stats::bytes_recv(msg.len());
-
-                            // Add socket's fd to epoll watch list
-                            //
-                            // Rust's TcpStream clone method makes use of the F_DUPFD flag
-                            // for duplicating file descriptors. This means the fd we just read
-                            // from and/or the original fd added to epoll for this stream cannot
-                            // be used to MOD, or DEL and ADD again, in order to re-register for
-                            // the same events, with the same fd.
-                            // The originally added fd is essentially invalid at this point, but
-                            // lucky for us, Rust sets the CLOEXEC flag for fds, which means that
-                            // the system will clean them up when they go out of scope. Also,
-                            // epoll removes fds when the system clears them, so we should be OK
-                            // from any internal fd leaks here. All we really care about, is if
-                            // we receive the EEXIST from the call. In this case, we must apply
-                            // the adjustment as a MOD
-                            let mut event = EpollEvent {
-                                data: socket_ptr,
-                                events: EVENTS
-                            };
-                            let s_id = s_clone.id();
-                            match epoll::ctl(t_epfd.clone(), ctl_op::ADD, socketfd, &mut event) {
-                                Ok(_) => trace!("Socket back in epoll list"),
-                                Err(e) => {
-                                    if e == CtlError::EEXIST {
-                                        trace!("Fd already exists in epoll, trying ctl::MOD");
-                                        match epoll::ctl(t_epfd.clone(), ctl_op::MOD, socketfd,
-                                            &mut event) {
-                                            Ok(_) => trace!("Socket back in epoll list with mod"),
-                                            Err(_) => {
-                                                warn!("Error modifying socket in epoll...")
-                                            }
-                                        };
-                                    } else {
-                                        warn!("Epoll CtrlError during mod: {}", e);
-                                        warn!("s.id: {}", s_id);
-                                        warn!("epfd: {}", t_epfd.clone());
-                                        warn!("fd: {}", socketfd);
-                                    }
-                                }
-                            };
-                        }
-                    }
-                    Err(e) => {
-                        debug!("Error reading socket: {}", e);
-                        // We really don't care what happened, it all results in the same
-                        // outcome - remove the socket from system...
-                        let s_id = s_clone.id();
-                        epoll_remove_fd(t_epfd, socketfd);
-                        remove_socket_from_list(s_id, socket_list.clone());
-                        let mut guard = match t_handler.lock() {
-                            Ok(guard) => guard,
-                            Err(poisoned) => {
-                                warn!("SocketList Mutex failed, using anyway...");
-                                poisoned.into_inner()
-                            }
-                        };
-                        let e_handler = guard.deref_mut();
-                        e_handler.on_socket_closed(s_id);
-                    }
-                };
+                handle_read_event(epfd, socket.clone(), socket_list.clone(),
+                    t_handler.clone(), ptr_addr);
             });
         } else { warn!("Unknown epoll event received: {}", event.data); continue; }
     }
+}
+
+fn handle_read_event(epfd: RawFd,
+                     socket: Socket,
+                     sockets: SocketList,
+                     handler: SafeHandler,
+                     ptr_addr: usize) {
+    let mut socket = socket;
+    let result = socket.read();
+    if result.is_err() {
+        // There is no saveing grace here. If we can't read, only option
+        // is to remove it from server
+        handle_drop_event(epfd, socket, sockets, handler);
+        return;
+    }
+
+    for msg in socket.buffer().iter() {
+        // Pass the msg on to the handler
+        { // EventHandler Mutex locked
+            let mut guard = match handler.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("EventHandler Mutex failed, using anyway...");
+                    poisoned.into_inner()
+                }
+            };
+            let e_handler = guard.deref_mut();
+            e_handler.on_data_received(socket.clone(), sockets.clone(), msg.clone());
+        } // EventHandler Mutex unlocked
+
+        // Collect some stats
+        stats::msg_recv();
+        stats::bytes_recv(msg.len());
+
+        // Add socket's fd to epoll watch list
+        //
+        // std::net::TcpStream uses F_DUPFD flag when calling clone(). This means that
+        // it is very likely that the read event we received for this socket may not actually
+        // be the exact same file descriptor (RawFd) as the one that registered it. Therefore,
+        // we have several steps to take in order to try and re-register the same one or add it
+        // again if epoll tells us the fd does not exist.
+        // This approach does not have any ill effects though, Rust happily sets the CLOEXEC flag
+        // on all owned fds, so once any of our sockets go out of scope, the kernel will clean
+        // them up for us. Epoll, as it happens, removes fds from the watch list also, once the
+        // kernel cleans them up.
+        // We start off with an add, because we're assuming the socket is a clone and fds are
+        // different
+        let mut event = EpollEvent {
+            data: ptr_addr as u64,
+            events: EVENTS
+        };
+        let _ = epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut event).map_err(|e| {
+            if e == CtlError::EEXIST {
+                // Fd does not currently exist in epoll, we'll add it then because it must have
+                // been a F_DUPFD'd fd from one of the cloned sockets.
+                let _ = epoll::ctl(epfd, ctl_op::MOD, socket.raw_fd(), &mut event).map_err(|e| {
+                    error!("During epoll::ctl: {}", e);
+                });
+            } else {
+                error!("During epoll::ctl: {}", e);
+            }
+        });
+    }
+}
+
+fn handle_drop_event(epfd: RawFd, socket: Socket, sockets: SocketList, handler: SafeHandler) {
+    epoll_remove_fd(epfd, socket.raw_fd());
+    remove_socket_from_list(socket.id(), sockets);
+
+    let mut guard = match handler.lock() {
+        Ok(g) => g,
+        Err(p) => {
+            warn!("EventHandler Mutex failed, using anyway...");
+            p.into_inner()
+        }
+    };
+    let e_handler = guard.deref_mut();
+    e_handler.on_socket_closed(socket.id());
 }
 
 fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
