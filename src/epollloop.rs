@@ -34,6 +34,8 @@ use resources::ResourcePool;
 // EPOLLRDHUP   - Connection has been closed
 // EPOLLONESHOT - After an event has been received, and reported, do not track
 //                further changes until explicitly told to do so.
+// EPOLLERR     - Some error occurred
+// EPOLLHUP     - Hang up happened
 const EVENTS: u32 = (
     event_type::EPOLLET | // Set fd to EdgeTrigger mode
     event_type::EPOLLIN |
