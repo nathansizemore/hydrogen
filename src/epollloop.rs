@@ -164,22 +164,13 @@ fn epoll_event_handler(epfd: RawFd,
     let mut pool = ResourcePool::new();
 
     for event in rx.iter() {
-        // Get a pointer to the socket in the list
-        let socket_ptr;
-        { // Begin Mutex lock
-            let _ = match sockets.lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => {
-                    warn!("SocketList Mutex failed, using anyway...");
-                    poisoned.into_inner()
-                }
-            };
-            socket_ptr = event.data as *mut Socket;
-        } // End Mutex lock
+        trace!("received epoll event");
 
         // Move semantics are a little weird right here, so we must use clones of clones
         // in order to make the compiler happy
+        let socket_ptr = event.data as *mut Socket;
         if (event.events & DROP_EVENT) > 0 {
+            trace!("event was drop event");
             let t_handler = handler.clone();
             let socket_list = sockets.clone();
             let socket = unsafe { (*socket_ptr).clone() };
@@ -187,6 +178,7 @@ fn epoll_event_handler(epfd: RawFd,
                 handle_drop_event(epfd, socket.clone(), socket_list.clone(), t_handler.clone());
             });
         } else if (event.events & READ_EVENT) > 0 {
+            trace!("event was read event");
             let t_handler = handler.clone();
             let socket_list = sockets.clone();
             let socket = unsafe { (*socket_ptr).clone() };
@@ -195,7 +187,7 @@ fn epoll_event_handler(epfd: RawFd,
                 handle_read_event(epfd, socket.clone(), socket_list.clone(),
                     t_handler.clone(), ptr_addr);
             });
-        } else { warn!("Unknown epoll event received: {}", event.data); continue; }
+        } else { warn!("event was unknown: {}", event.data); continue; }
     }
 }
 
@@ -250,6 +242,7 @@ fn handle_read_event(epfd: RawFd,
         };
         let _ = epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut event).map_err(|e| {
             if e == CtlError::EEXIST {
+                trace!("Fd exists in epoll, trying mod");
                 // Fd does not currently exist in epoll, we'll add it then because it must have
                 // been a F_DUPFD'd fd from one of the cloned sockets.
                 let _ = epoll::ctl(epfd, ctl_op::MOD, socket.raw_fd(), &mut event).map_err(|e| {
@@ -278,7 +271,7 @@ fn handle_drop_event(epfd: RawFd, socket: Socket, sockets: SocketList, handler: 
 }
 
 fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
-    debug!("remove_socket_from_epoll");
+    debug!("removing fd from epoll");
 
     // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
     // a non-null pointer in event, even though this argument is ignored.
@@ -310,7 +303,7 @@ fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
 
 /// Removes socket_ids from master list
 fn remove_socket_from_list(socket_id: u32, sockets: SocketList) {
-    debug!("remove_socket_from_list");
+    debug!("removing socket from master list");
 
     let mut s_guard = match sockets.lock() {
         Ok(guard) => guard,
