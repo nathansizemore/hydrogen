@@ -25,26 +25,26 @@ impl ResourcePool {
 
     /// Creates a new pool of worker threads
     pub fn new() -> ResourcePool {
-        // This is designed to only be used in a multi-core/cpu environment.
-        // Defaults to only one thread per cpu/core.
+        // At this time, the following threads have been accounted for:
+        // 1.) System resources/applications
+        // 2.) Incoming connections
+        // 3.) Epoll wait event loop
+        // 4.) Epoll event handler
         //
-        // One thread is already accounted for with the incoming connection
-        // listener. One thread is accounted for with the event loop.
-        // We need one cpu left available for anything else the system needs
-        // to do that is not related to our program. That means, by default,
-        // the number of worker threads is (totalCPUs - 3).
-        //
-        // Obviously, if this machine is running less than 4 cores, we should
-        // panic and thow out an error message to indicate we need more POWER!!
-        let num = num_cpus::get();
-        if num < 4 {
-            error!("Need a minimum of 4 CPUs to run");
-            panic!()
+        // So, in theory, we should be allocating enough workers for num cpus - 4
+        // But, this might be in a dev environment where keeping one thread per core
+        // is not such a huge rule. We'll just assume the user knows that they will only
+        // get 1 worker thread for anything less than 5 cores reported by the system.
+        let cpus = num_cpus::get();
+        let num_workers: i8 = cpus - 4;
+        if num_workers < 1 {
+            warn!("Yo - asumming a dev env. Only 1 worker thread will be used");
+            num_workers = 1;
         }
 
         // Initialize woker threads
         let mut w_threads = Vec::<WorkerThread>::with_capacity(num);
-        for _ in 0..num {
+        for _ in 0..num_workers {
             w_threads.push(WorkerThread::new());
         }
 

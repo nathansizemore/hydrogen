@@ -121,13 +121,14 @@ fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
         } // End Mutex lock
 
         // Add to epoll
-        let mut event = EpollEvent {
+        if epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut EpollEvent {
             data: (socket_ptr as usize) as u64,
             events: EVENTS
-        };
-        let _ = epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut event).map_err(|e| {
+        }).is_err() {
             error!("CtrlError during add: {}", e);
-        });
+        } else {
+            stats::conn_recv();
+        }
     }
     drop(listener);
 }
@@ -167,7 +168,8 @@ fn epoll_event_handler(epfd: RawFd,
         trace!("received epoll event");
 
         // Move semantics are a little weird right here, so we must use clones of clones
-        // in order to make the compiler happy
+        // in order to make the compiler happy. This will be fixed once FnBox trait is
+        // released into stable channel.
         let socket_ptr = event.data as *mut Socket;
         if (event.events & DROP_EVENT) > 0 {
             trace!("event was drop event");
