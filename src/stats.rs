@@ -210,12 +210,12 @@ pub fn init(data_ref: &mut Mutex<GeneralData>) {
 pub fn conn_recv() {
     let mut d_guard;
     unsafe {
-        let d_guard = match (*data).lock() {
-            Ok(guard) => d_guard = guard,
+        d_guard = match (*data).lock() {
+            Ok(guard) => guard,
             Err(e) => {
                 error!("Retrieveing lock on GeneralData: {}", e);
                 e.into_inner()
-            };
+            }
         };
     }
 
@@ -228,13 +228,13 @@ pub fn conn_recv() {
 pub fn conn_lost() {
     let mut d_guard;
     unsafe {
-        let d_guard = match (*data).lock() {
-            Ok(guard) => d_guard = guard,
+        d_guard = match (*data).lock() {
+            Ok(guard) => guard,
             Err(e) => {
                 error!("Retrieveing lock on GeneralData: {}", e);
                 e.into_inner()
-            };
-        }
+            }
+        };
     }
 
     let d = d_guard.deref_mut();
@@ -250,13 +250,13 @@ pub fn conn_lost() {
 pub fn msg_recv() {
     let mut d_guard;
     unsafe {
-        let d_guard = match (*data).lock() {
-            Ok(guard) => d_guard = guard,
+        d_guard = match (*data).lock() {
+            Ok(guard) => guard,
             Err(e) => {
                 error!("Retrieveing lock on GeneralData: {}", e);
                 e.into_inner()
-            };
-        }
+            }
+        };
     }
 
     let d = d_guard.deref_mut();
@@ -268,13 +268,13 @@ pub fn msg_recv() {
 pub fn bytes_recv(amount: usize) {
     let mut d_guard;
     unsafe {
-        let d_guard = match (*data).lock() {
-            Ok(guard) => d_guard = guard,
+        d_guard = match (*data).lock() {
+            Ok(guard) => guard,
             Err(e) => {
                 error!("Retrieveing lock on GeneralData: {}", e);
                 e.into_inner()
-            };
-        }
+            }
+        };
     }
 
     let d = d_guard.deref_mut();
@@ -286,13 +286,13 @@ pub fn bytes_recv(amount: usize) {
 pub fn bytes_sent(amount: usize) {
     let mut d_guard;
     unsafe {
-        let d_guard = match (*data).lock() {
-            Ok(guard) => d_guard = guard,
+        d_guard = match (*data).lock() {
+            Ok(guard) => guard,
             Err(e) => {
                 error!("Retrieveing lock on GeneralData: {}", e);
                 e.into_inner()
-            };
-        }
+            }
+        };
     }
 
     let d = d_guard.deref_mut();
@@ -304,13 +304,13 @@ pub fn bytes_sent(amount: usize) {
 pub fn msg_sent() {
     let mut d_guard;
     unsafe {
-        let d_guard = match (*data).lock() {
-            Ok(guard) => d_guard = guard,
+        d_guard = match (*data).lock() {
+            Ok(guard) => guard,
             Err(e) => {
                 error!("Retrieveing lock on GeneralData: {}", e);
                 e.into_inner()
-            };
-        }
+            }
+        };
     }
 
     let d = d_guard.deref_mut();
@@ -327,14 +327,14 @@ pub fn as_serialized_buffer(perf_sec: f32) -> Result<Vec<u8>, ()> {
     {
         let d_guard;
         unsafe {
-            match (*data).lock() {
-                Ok(guard) => d_guard = guard,
+            d_guard = match (*data).lock() {
+                Ok(guard) => guard,
                 Err(e) => {
                     error!("Failed to retrieve lock on GeneralData mutex");
                     error!("{}", e);
                     return Err(());
                 }
-            }
+            };
         }
 
         d_clone = d_guard.deref().clone();

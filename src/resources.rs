@@ -36,14 +36,14 @@ impl ResourcePool {
         // is not such a huge rule. We'll just assume the user knows that they will only
         // get 1 worker thread for anything less than 5 cores reported by the system.
         let cpus = num_cpus::get();
-        let num_workers: i8 = cpus - 4;
+        let mut num_workers: i8 = (cpus as i8) - 4;
         if num_workers < 1 {
             warn!("Yo - asumming a dev env. Only 1 worker thread will be used");
             num_workers = 1;
         }
 
         // Initialize woker threads
-        let mut w_threads = Vec::<WorkerThread>::with_capacity(num);
+        let mut w_threads = Vec::<WorkerThread>::with_capacity(num_workers as usize);
         for _ in 0..num_workers {
             w_threads.push(WorkerThread::new());
         }
