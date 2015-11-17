@@ -50,6 +50,15 @@ use super::num_cpus;
 use super::rustc_serialize::json;
 
 
+// TODO - These are things I want to track
+//
+// Cpu usage
+// Ram usage
+// File descriptors
+// Current socket buffer size
+// 
+
+
 // Global mutable state, ftw!
 
 /// This is set to point to an actual location passed in through the
