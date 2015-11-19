@@ -41,7 +41,7 @@ pub fn begin<T, K>(address: T, handler: Box<K>) where
     initialize_logger();
 
     // Data collection
-    let mut data = Mutex::new(stats::GeneralData::new());
+    let mut data = Mutex::new(stats::Stats::new());
     stats::init(&mut data);
 
     // Begin server

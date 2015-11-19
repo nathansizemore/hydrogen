@@ -56,7 +56,7 @@ use super::rustc_serialize::json;
 // Ram usage
 // File descriptors
 // Current socket buffer size
-// 
+//
 
 
 // Global mutable state, ftw!
@@ -64,7 +64,7 @@ use super::rustc_serialize::json;
 /// This is set to point to an actual location passed in through the
 /// init function. It is assumed that whatever is passed in will have a static lifetime.
 /// The ownness of lifetime guarantee is on the caller of stats::init()
-static mut data: *mut Mutex<GeneralData> = 0 as *mut Mutex<GeneralData>;
+static mut data: *mut Mutex<Stats> = 0 as *mut Mutex<Stats>;
 
 /// Server start time, used for calculating up_time
 static mut start_time: f64 = 0 as f64;
@@ -72,7 +72,7 @@ static mut start_time: f64 = 0 as f64;
 
 /// Serializable struct of various performance metrics
 #[derive(RustcDecodable, RustcEncodable, Clone)]
-pub struct GeneralData {
+pub struct Stats {
     /// Total time since server was started
     up_time: u64,
     /// Total bytes received
@@ -116,11 +116,11 @@ pub struct CpuData {
 }
 
 
-impl GeneralData {
+impl Stats {
 
-    /// Returns a new GeneralData
-    pub fn new() -> GeneralData {
-        GeneralData {
+    /// Returns a new Stats
+    pub fn new() -> Stats {
+        Stats {
             up_time: 0u64,
             bytes_recv: 0u64,
             bytes_sent: 0u64,
@@ -204,9 +204,9 @@ impl CpuData {
 
 
 /// Initializes the module and sets default state
-/// data_ref should represent a Mutex<GeneralData> structure that
+/// data_ref should represent a Mutex<Stats> structure that
 /// will live for the lifetime of the application
-pub fn init(data_ref: &mut Mutex<GeneralData>) {
+pub fn init(data_ref: &mut Mutex<Stats>) {
     unsafe {
         data = data_ref;
         start_time = time::precise_time_s();
@@ -222,7 +222,7 @@ pub fn conn_recv() {
         d_guard = match (*data).lock() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Retrieveing lock on GeneralData: {}", e);
+                error!("Retrieveing lock on Stats: {}", e);
                 e.into_inner()
             }
         };
@@ -240,7 +240,7 @@ pub fn conn_lost() {
         d_guard = match (*data).lock() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Retrieveing lock on GeneralData: {}", e);
+                error!("Retrieveing lock on Stats: {}", e);
                 e.into_inner()
             }
         };
@@ -262,7 +262,7 @@ pub fn msg_recv() {
         d_guard = match (*data).lock() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Retrieveing lock on GeneralData: {}", e);
+                error!("Retrieveing lock on Stats: {}", e);
                 e.into_inner()
             }
         };
@@ -280,7 +280,7 @@ pub fn bytes_recv(amount: usize) {
         d_guard = match (*data).lock() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Retrieveing lock on GeneralData: {}", e);
+                error!("Retrieveing lock on Stats: {}", e);
                 e.into_inner()
             }
         };
@@ -298,7 +298,7 @@ pub fn bytes_sent(amount: usize) {
         d_guard = match (*data).lock() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Retrieveing lock on GeneralData: {}", e);
+                error!("Retrieveing lock on Stats: {}", e);
                 e.into_inner()
             }
         };
@@ -316,7 +316,7 @@ pub fn msg_sent() {
         d_guard = match (*data).lock() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Retrieveing lock on GeneralData: {}", e);
+                error!("Retrieveing lock on Stats: {}", e);
                 e.into_inner()
             }
         };
@@ -339,7 +339,7 @@ pub fn as_serialized_buffer(perf_sec: f32) -> Result<Vec<u8>, ()> {
             d_guard = match (*data).lock() {
                 Ok(guard) => guard,
                 Err(e) => {
-                    error!("Failed to retrieve lock on GeneralData mutex");
+                    error!("Failed to retrieve lock on Stats mutex");
                     error!("{}", e);
                     return Err(());
                 }
