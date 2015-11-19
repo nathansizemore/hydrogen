@@ -2,3 +2,7 @@
 name = "stream"
 version = "0.1.0"
 authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
+
+[dependencies]
+errno = "*"
+libc = "*"
