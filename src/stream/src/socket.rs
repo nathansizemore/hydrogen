@@ -17,6 +17,7 @@ use self::libc::{c_int, c_void};
 
 
 pub struct Socket {
+    /// This socket's file descriptor
     pub fd: c_int
 }
 
