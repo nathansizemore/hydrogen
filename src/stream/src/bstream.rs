@@ -17,6 +17,7 @@ use socket::Socket;
 
 pub struct Bstream<T: Read + Write + AsRawFd> {
     inner: T,
+    state: FrameState,
     scratch: Vec<u8>
 }
 
@@ -25,12 +26,16 @@ impl Bstream {
         let flags = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETFL, 0) };
         let bflags = flags & (~libc::O_NONBLOCK);
         let result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETFL, bflags) };
-        Bstream { inner: stream }
+
+        Bstream {
+            inner: stream
+            state: FrameState::Start,
+            scratch: Vec::new()
+        }
     }
 
     pub fn recv(&mut self) -> Result<Vec<u8>, Error> {
         let p_len;
-        let mut state = FrameState::Start;
         let mut p_len_buf = Vec::<u8>::with_capacity(2);
         let mut payload = Vec::<u8>::with_capacity(512);
 
@@ -43,8 +48,9 @@ impl Bstream {
             }
             let num_read = result.unwrap();
 
-            // We might be in the middle of separate tcp frames for a complete message,
-            // so we need to dump our just read buffer after our current scratch section
+            // If the scratch space has a len, we need to include it as data prior to the buffer
+            // we just read. It means during the last read call, there was an ending to a message
+            // plus the start of another. 
             let mut buf;
             if self.scratch.len() > 0 {
                 buf = Vec::<u8>::with_capacity(num_read + self.scratch.len());
