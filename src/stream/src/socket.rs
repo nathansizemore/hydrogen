@@ -9,7 +9,7 @@
 extern crate libc;
 extern crate errno;
 
-
+use std::os::unix::io::{RawFd, AsRawFd};
 use std::io::{Read, Write, Error, ErrorKind};
 
 use self::libc::{c_int, c_void};
@@ -52,6 +52,10 @@ impl Write for Socket {
     }
 
     fn flush(&mut self) -> Result<(), Error> { Ok(()) }
+}
+
+impl AsRawFd for Socket {
+    fn as_raw_fd(&self) -> RawFd { self.fd }
 }
 
 

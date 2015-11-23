@@ -18,10 +18,11 @@ use std::sync::mpsc::{
     Receiver
 };
 
+use libc;
 use epoll;
 use epoll::util::*;
 use epoll::EpollEvent;
-use simple_stream::nbetstream::NbetStream;
+use stream
 use stats;
 use types::*;
 use socket::Socket;
@@ -44,9 +45,8 @@ const EVENTS: u32 = (
     event_type::EPOLLERR |
     event_type::EPOLLHUP);
 
-pub fn begin<T, K>(address: T, handler: Box<K>) where
-    T: ToSocketAddrs + Send + 'static,
-    K: EventHandler + Send + Sync + 'static {
+pub fn begin<T>(config: Config, handler: Box<T>) where
+    T: EventHandler + Send + Sync + 'static {
     // Master socket list
     let sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
 
@@ -92,6 +92,16 @@ pub fn begin<T, K>(address: T, handler: Box<K>) where
 }
 
 fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
+    let result = unsafe { socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
+    let server_addr = libc::sockaddr_in {
+        sin_family: libc::AF_INET,j
+        sin_port:
+    }
+
+
+
+
+
     let listener = TcpListener::bind(address).unwrap();
     for connection in listener.incoming() {
         if connection.is_err() {
