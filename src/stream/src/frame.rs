@@ -10,8 +10,6 @@
 pub const START:    u8 = 0x01;
 /// Indicates end of frame
 pub const END:      u8 = 0x17;
-/// Indicates no data
-pub const EMPTY:    u8 = 0x00;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum FrameState {
