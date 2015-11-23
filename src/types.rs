@@ -9,18 +9,20 @@
 //! Various types used throughout the server crate
 
 
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
+use std::os::unix::io::AsRawFd;
 
-use socket::Socket;
+use stream::nbstream::Nbstream;
 
 pub trait EventHandler {
-    fn on_data_received(&mut self, sender: Socket, sockets: SocketList, buffer: Vec<u8>);
-    fn on_socket_closed(&mut self, id: u32);
+    fn on_data_received(&mut self, stream: Nbstream, buffer: Vec<u8>);
+    fn on_stream_closed(&mut self, id: String);
 }
 
-/// Thread LinkedList<Socket>
-pub type SocketList = Arc<Mutex<LinkedList<Socket>>>;
+/// Thread safe LinkedList<T: Stream>
+pub type StreamList = Arc<Mutex<LinkedList<Nbstream>>>;
 
 /// Thread safe EventHandler
 pub type SafeHandler = Arc<Mutex<EventHandler + Send + Sync + 'static>>;

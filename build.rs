@@ -5,13 +5,9 @@
 // distributed with this file, You can obtain one at
 // http://mozilla.org/MPL/2.0/.
 
-use log::LogLevelFilter;
 
-#[derive(Clone)]
-pub struct Config {
-    pub addr: String,
-    pub port: u16,
-    pub workers: u8,
-    pub ssl: bool,
-    pub log_level: LogLevelFilter
+extern crate gcc;
+
+fn main() {
+    gcc::compile_library("libshim.a", &["shim.c"]);
 }

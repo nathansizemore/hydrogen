@@ -6,32 +6,33 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-// TODO - Implement error handling for all spots where an OS error can occur
-
-use std::os::unix::io::AsRawFd;
-use std::io::{Read, Write, Error, ErrorKind};
+use std::os::unix::io::RawFd;
+use std::io::{Error, ErrorKind};
 
 use libc;
 use frame;
+use socket::Socket;
 use frame::FrameState;
-use super::Stream;
 
-pub struct Nbstream<T> {
-    inner: T,
+#[derive(Clone)]
+pub struct Nbstream {
+    id: String,
+    inner: Socket,
     state: FrameState,
     buffer: Vec<u8>,
     scratch: Vec<u8>,
     tx_queue: Vec<Vec<u8>>
 }
 
-impl<T: Read + Write + AsRawFd> Stream<T> for Nbstream<T> {
-    fn new(stream: T) -> Result<Nbstream<T>, Error> {
+impl Nbstream {
+    pub fn new(stream: Socket) -> Result<Nbstream, Error> {
         let result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) };
         if result < 0 {
             return Err(Error::from_raw_os_error(result as i32))
         }
 
         Ok(Nbstream {
+            id: "".to_string(),
             inner: stream,
             state: FrameState::Start,
             buffer: Vec::with_capacity(3),
@@ -40,7 +41,15 @@ impl<T: Read + Write + AsRawFd> Stream<T> for Nbstream<T> {
         })
     }
 
-    fn recv(&mut self) -> Result<Vec<u8>, Error> {
+    pub fn id(&self) -> String {
+        self.id.clone()
+    }
+
+    pub fn as_raw_fd(&self) -> RawFd {
+        self.inner.as_raw_fd()
+    }
+
+    pub fn recv(&mut self) -> Result<Vec<u8>, Error> {
         loop {
             let mut buf = Vec::<u8>::with_capacity(512);
             unsafe { buf.set_len(512); }
@@ -74,7 +83,7 @@ impl<T: Read + Write + AsRawFd> Stream<T> for Nbstream<T> {
         }
     }
 
-    fn send(&mut self, buf: &[u8]) -> Result<usize, Error> {
+    pub fn send(&mut self, buf: &[u8]) -> Result<usize, Error> {
         let mut total_written = 0usize;
         self.tx_queue.push(frame::from_slice(buf));
         for x in 0..self.tx_queue.len() {
@@ -98,9 +107,7 @@ impl<T: Read + Write + AsRawFd> Stream<T> for Nbstream<T> {
         }
         Ok(total_written)
     }
-}
 
-impl<T: Read + Write + AsRawFd> Nbstream<T> {
     fn buf_with_scratch(&mut self, buf: &[u8], len: usize) -> Vec<u8> {
         let mut new_buf = Vec::<u8>::with_capacity(self.scratch.len() + len);
         for byte in self.scratch.iter() {

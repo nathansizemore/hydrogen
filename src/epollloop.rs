@@ -6,7 +6,9 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::thread;
+use std::{ptr, mem, thread};
+use std::ffi::CString;
+use std::io::{Error, ErrorKind};
 use std::net::{TcpListener, ToSocketAddrs};
 use std::ops::DerefMut;
 use std::os::unix::io::RawFd;
@@ -22,12 +24,19 @@ use libc;
 use epoll;
 use epoll::util::*;
 use epoll::EpollEvent;
-use stream
+use stream::socket::Socket;
+use stream::nbstream::Nbstream;
 use stats;
 use types::*;
-use socket::Socket;
 use resources::ResourcePool;
+use libc::{c_int, c_void, c_char, c_ushort};
+use config::Config;
 
+
+extern "C" {
+    fn shim_inet_pton(af: c_int, src: *const c_char, dst: *mut c_void) -> c_int;
+    fn shim_htons(hostshort: c_ushort) -> c_ushort;
+}
 
 // When added to epoll, these will be the conditions of kernel notification:
 //
@@ -48,7 +57,7 @@ const EVENTS: u32 = (
 pub fn begin<T>(config: Config, handler: Box<T>) where
     T: EventHandler + Send + Sync + 'static {
     // Master socket list
-    let sockets = Arc::new(Mutex::new(LinkedList::<Socket>::new()));
+    let sockets = Arc::new(Mutex::new(LinkedList::<Nbstream>::new()));
 
     // Epoll instance
     let result = epoll::create1(0);
@@ -61,13 +70,13 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
 
     // EpollEvent handler thread
     let epfd1 = epfd.clone();
-    let sockets1 = sockets.clone();
+    let streams1 = sockets.clone();
     let (tx_ep_event, rx_ep_event): (Sender<EpollEvent>, Receiver<EpollEvent>) = channel();
     let safe_handler = Arc::new(Mutex::new(*handler));
     thread::Builder::new()
         .name("EpollEvent Handler".to_string())
         .spawn(move || {
-            epoll_event_handler(epfd1, rx_ep_event, sockets1, safe_handler);
+            epoll_event_handler(epfd1, rx_ep_event, streams1, safe_handler);
         }).unwrap();
 
     // Epoll wait thread
@@ -80,68 +89,75 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
 
     // New connection thread
     let epfd3 = epfd.clone();
-    let sockets2 = sockets.clone();
+    let streams2 = sockets.clone();
+    let cfg_clone = config.clone();
     let prox = thread::Builder::new()
         .name("TCP Incoming Listener".to_string())
         .spawn(move || {
-            listen(address, epfd3, sockets2);
+            listen(config, epfd3, streams2);
         }).unwrap();
 
     // Stay alive forever
     let _ = prox.join();
 }
 
-fn listen<T: ToSocketAddrs>(address: T, epfd: RawFd, sockets: SocketList) {
-    let result = unsafe { socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
-    let server_addr = libc::sockaddr_in {
-        sin_family: libc::AF_INET,j
-        sin_port:
-    }
+fn listen(config: Config, epfd: RawFd, streams: StreamList) {
+    unsafe {
+        let cstr_addr = CString::new(config.addr).unwrap();
+        let mut addr_buf = libc::malloc(mem::size_of::<libc::in_addr>());
+        let server_addr = libc::sockaddr_in {
+            sin_family: libc::AF_INET as u16,
+            sin_port: shim_htons(config.port),
+            sin_addr: libc::in_addr {
+                s_addr: shim_inet_pton(libc::AF_INET, cstr_addr.as_ptr(), addr_buf) as u32
+            },
+            sin_zero: [0u8; 8]
+        };
 
+        let server_fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
+        let serv_addr: *const libc::sockaddr = mem::transmute(&server_addr);
+        libc::bind(server_fd, serv_addr, mem::size_of::<libc::sockaddr_in>() as u32);
+        libc::listen(server_fd, 100);
 
-
-
-
-    let listener = TcpListener::bind(address).unwrap();
-    for connection in listener.incoming() {
-        if connection.is_err() {
-            warn!("Error encountered during TCP connection: {}", connection.unwrap_err());
-            continue;
-        }
-
-        let result = NbetStream::new(connection.unwrap());
-        if result.is_err() {
-            warn!("Error creating nbstream: {:?}", result.unwrap_err());
-            continue;
-        }
-
-        let socket_ptr;
-        let socket = Socket::new(result.unwrap());
-        { // Begin Mutex lock
-            let mut guard = match sockets.lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => {
-                    warn!("SocketList Mutex failed, using anyway...");
-                    poisoned.into_inner()
-                }
+        loop {
+            let client_fd = libc::accept(server_fd,
+                ptr::null_mut() as *mut libc::sockaddr, ptr::null_mut() as *mut u32);
+            let socket = Socket {
+                fd: client_fd
             };
-            let socket_list = guard.deref_mut();
-            socket_list.push_back(socket.clone());
-            socket_ptr = socket_list.back_mut().unwrap() as *mut Socket;
-        } // End Mutex lock
+            let stream;
+            if config.ssl {
+                unimplemented!()
+            } else {
+                stream = Nbstream::new(socket).unwrap();
+            }
 
-        // Add to epoll
-        let add_res = epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut EpollEvent {
-            data: (socket_ptr as usize) as u64,
-            events: EVENTS
-        });
-        if add_res.is_err() {
-            error!("CtrlError during add: {}", add_res.unwrap_err());
-        } else {
-            stats::conn_recv();
+            let stream_ptr;
+            { // Begin Mutex lock
+                let mut guard = match streams.lock() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => {
+                        warn!("StreamList Mutex failed, using anyway...");
+                        poisoned.into_inner()
+                    }
+                };
+                let stream_list = guard.deref_mut();
+                stream_list.push_back(stream.clone());
+                stream_ptr = stream_list.back_mut().unwrap() as *mut Nbstream;
+            } // End Mutex lock
+
+            // Add to epoll
+            let add_res = epoll::ctl(epfd, ctl_op::ADD, stream.as_raw_fd(), &mut EpollEvent {
+                data: (stream_ptr as usize) as u64,
+                events: EVENTS
+            });
+            if add_res.is_err() {
+                error!("CtrlError during add: {}", add_res.unwrap_err());
+            } else {
+                stats::conn_recv();
+            }
         }
     }
-    drop(listener);
 }
 
 fn epoll_wait_loop(epfd: RawFd, tx_handler: Sender<EpollEvent>) {
@@ -166,7 +182,7 @@ fn epoll_wait_loop(epfd: RawFd, tx_handler: Sender<EpollEvent>) {
 
 fn epoll_event_handler(epfd: RawFd,
                        rx: Receiver<EpollEvent>,
-                       sockets: SocketList,
+                       streams: StreamList,
                        handler: SafeHandler) {
     // Types of events we care about
     const READ_EVENT: u32 = event_type::EPOLLIN;
@@ -181,23 +197,23 @@ fn epoll_event_handler(epfd: RawFd,
         // Move semantics are a little weird right here, so we must use clones of clones
         // in order to make the compiler happy. This will be fixed once FnBox trait is
         // released into stable channel.
-        let socket_ptr = event.data as *mut Socket;
+        let stream_ptr = event.data as *mut Nbstream;
         if (event.events & DROP_EVENT) > 0 {
             trace!("event was drop event");
             let t_handler = handler.clone();
-            let socket_list = sockets.clone();
-            let socket = unsafe { (*socket_ptr).clone() };
+            let stream_list = streams.clone();
+            let stream = unsafe { (*stream_ptr).clone() };
             pool.run(move || {
-                handle_drop_event(epfd, socket.clone(), socket_list.clone(), t_handler.clone());
+                handle_drop_event(epfd, stream.clone(), stream_list.clone(), t_handler.clone());
             });
         } else if (event.events & READ_EVENT) > 0 {
             trace!("event was read event");
             let t_handler = handler.clone();
-            let socket_list = sockets.clone();
-            let socket = unsafe { (*socket_ptr).clone() };
-            let ptr_addr = socket_ptr as usize;
+            let stream_list = streams.clone();
+            let stream = unsafe { (*stream_ptr).clone() };
+            let ptr_addr = stream_ptr as usize;
             pool.run(move || {
-                handle_read_event(epfd, socket.clone(), socket_list.clone(),
+                handle_read_event(epfd, stream.clone(), stream_list.clone(),
                     t_handler.clone(), ptr_addr);
             });
         } else { warn!("event was unknown: {}", event.data); continue; }
@@ -205,72 +221,53 @@ fn epoll_event_handler(epfd: RawFd,
 }
 
 fn handle_read_event(epfd: RawFd,
-                     socket: Socket,
-                     sockets: SocketList,
+                     stream: Nbstream,
+                     streams: StreamList,
                      handler: SafeHandler,
                      ptr_addr: usize) {
-    let mut socket = socket;
-    let result = socket.read();
-    if result.is_err() {
-        // There is no saveing grace here. If we can't read, only option
-        // is to remove it from server
-        handle_drop_event(epfd, socket, sockets, handler);
-        return;
-    }
+    let mut stream = stream;
+    match stream.recv() {
+        Ok(buf) => {
+            let buf_len = buf.len();
+            { // EventHandler Mutex locked
+                let mut guard = match handler.lock() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => {
+                        warn!("EventHandler Mutex failed, using anyway...");
+                        poisoned.into_inner()
+                    }
+                };
+                let e_handler = guard.deref_mut();
+                e_handler.on_data_received(stream.clone(), buf);
+            } // EventHandler Mutex unlocked
 
-    for msg in socket.buffer().iter() {
-        // Pass the msg on to the handler
-        { // EventHandler Mutex locked
-            let mut guard = match handler.lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => {
-                    warn!("EventHandler Mutex failed, using anyway...");
-                    poisoned.into_inner()
-                }
-            };
-            let e_handler = guard.deref_mut();
-            e_handler.on_data_received(socket.clone(), sockets.clone(), msg.clone());
-        } // EventHandler Mutex unlocked
-
-        // Collect some stats
-        stats::msg_recv();
-        stats::bytes_recv(msg.len());
-
-        // Add socket's fd to epoll watch list
-        //
-        // std::net::TcpStream uses F_DUPFD flag when calling clone(). This means that
-        // it is very likely that the read event we received for this socket may not actually
-        // be the exact same file descriptor (RawFd) as the one that registered it. Therefore,
-        // we have several steps to take in order to try and re-register the same one or add it
-        // again if epoll tells us the fd does not exist.
-        // This approach does not have any ill effects though, Rust happily sets the CLOEXEC flag
-        // on all owned fds, so once any of our sockets go out of scope, the kernel will clean
-        // them up for us. Epoll, as it happens, removes fds from the watch list also, once the
-        // kernel cleans them up.
-        // We start off with an add, because we're assuming the socket is a clone and fds are
-        // different
-        let mut event = EpollEvent {
-            data: ptr_addr as u64,
-            events: EVENTS
-        };
-        let _ = epoll::ctl(epfd, ctl_op::ADD, socket.raw_fd(), &mut event).map_err(|e| {
-            if e == CtlError::EEXIST {
-                trace!("Fd exists in epoll, trying mod");
-                // Fd does not currently exist in epoll, we'll add it then because it must have
-                // been a F_DUPFD'd fd from one of the cloned sockets.
-                let _ = epoll::ctl(epfd, ctl_op::MOD, socket.raw_fd(), &mut event).map_err(|e| {
-                    error!("During epoll::ctl: {}", e);
-                });
-            } else {
-                error!("During epoll::ctl: {}", e);
+            // Collect some stats
+            stats::msg_recv();
+            stats::bytes_recv(buf_len);
+        }
+        Err(e) => {
+            if e.kind() != ErrorKind::WouldBlock {
+                handle_drop_event(epfd, stream, streams, handler);
+                return;
             }
-        });
-    }
+        }
+    };
+
+    // Re-enable stream in epoll watch list
+    let _ = epoll::ctl(epfd, ctl_op::MOD, stream.as_raw_fd(), &mut EpollEvent {
+        data: ptr_addr as u64,
+        events: EVENTS
+    }).map_err(|e| {
+        error!("During epoll::ctl: {}", e);
+    });
 }
 
-fn handle_drop_event(epfd: RawFd, socket: Socket, sockets: SocketList, handler: SafeHandler) {
-    epoll_remove_fd(epfd, socket.raw_fd());
-    remove_socket_from_list(socket.id(), sockets);
+fn handle_drop_event(epfd: RawFd,
+                     stream: Nbstream,
+                     streams: StreamList,
+                     handler: SafeHandler) {
+    epoll_remove_fd(epfd, stream.as_raw_fd());
+    remove_socket_from_list(stream.id(), streams);
 
     let mut guard = match handler.lock() {
         Ok(g) => g,
@@ -280,7 +277,7 @@ fn handle_drop_event(epfd: RawFd, socket: Socket, sockets: SocketList, handler: 
         }
     };
     let e_handler = guard.deref_mut();
-    e_handler.on_socket_closed(socket.id());
+    e_handler.on_stream_closed(stream.id());
 }
 
 fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
@@ -291,60 +288,45 @@ fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
     // Since Linux 2.6.9, event can be specified as NULL when using
     // EPOLL_CTL_DEL.  Applications that need to be portable to kernels
     // before 2.6.9 should specify a non-null pointer in event.
-    let mut rm_event = EpollEvent {
+    epoll::ctl(epfd, ctl_op::DEL, fd, &mut EpollEvent {
         data: 0 as u64,
         events: 0 as u32
-    };
-
-    // Depending on how fds are duplicated with .clone(), this may fail.
-    //
-    // If the failure case is CtlError::ENOENT, we do not care, because
-    // epoll will clean the up the descriptor after they are all dropped from
-    // program memory
-    match epoll::ctl(epfd, ctl_op::DEL, fd, &mut rm_event) {
-        Ok(()) => trace!("Socket removed from epoll watch list"),
-        Err(e) => {
-            match e {
-                CtlError::ENOENT => {
-                    trace!("Fd not found in epoll, will remove when fd is syscall closed");
-                }
-                _ => warn!("Epoll CtrlError during del: {}", e)
-            }
-        }
-    };
+    }).map_err(|e| {
+        warn!("Epoll CtrlError during del: {}", e)
+    });
 }
 
-/// Removes socket_ids from master list
-fn remove_socket_from_list(socket_id: u32, sockets: SocketList) {
-    debug!("removing socket from master list");
+/// Removes stream with id from master list
+fn remove_socket_from_list(id: String, streams: StreamList) {
+    debug!("removing stream from master list");
 
-    let mut s_guard = match sockets.lock() {
+    let mut guard = match streams.lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
-            warn!("SocketList Mutex was poisoned, using anyway");
+            warn!("StreamList Mutex was poisoned, using anyway");
             poisoned.into_inner()
         }
     };
-    let s_list = s_guard.deref_mut();
+    let list = guard.deref_mut();
 
-    let mut s_found = false;
+    let mut found = false;
     let mut index = 1usize;
-    for s in s_list.iter() {
-        if s.id() == socket_id {
-            s_found = true;
+    for s in list.iter() {
+        if s.id() == id {
+            found = true;
             break;
         }
         index += 1;
     }
 
-    if !s_found { return; }
+    if !found { return; }
 
     if index == 1 {
-        s_list.pop_front();
+        list.pop_front();
     } else {
-        let mut split = s_list.split_off(index - 1);
+        let mut split = list.split_off(index - 1);
         split.pop_front();
-        s_list.append(&mut split);
+        list.append(&mut split);
     }
 
     stats::conn_lost();

@@ -5,13 +5,14 @@
 // distributed with this file, You can obtain one at
 // http://mozilla.org/MPL/2.0/.
 
-use log::LogLevelFilter;
+#include <arpa/inet.h>
 
-#[derive(Clone)]
-pub struct Config {
-    pub addr: String,
-    pub port: u16,
-    pub workers: u8,
-    pub ssl: bool,
-    pub log_level: LogLevelFilter
+int shim_inet_pton(int af, const char *src, void *dst)
+{
+    return inet_pton(af, src, dst);
+}
+
+unsigned short shim_htons(unsigned short hostshort)
+{
+    return htons(hostshort);
 }

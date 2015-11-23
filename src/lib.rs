@@ -12,18 +12,19 @@ extern crate fern;
 extern crate time;
 extern crate libc;
 extern crate rand;
-extern crate simple_stream;
-extern crate num_cpus;
 extern crate epoll;
+extern crate stream;
+extern crate num_cpus;
 extern crate rustc_serialize;
 
 use std::sync::Mutex;
 use std::net::ToSocketAddrs;
 
 use types::*;
+use config::Config;
 
+pub mod config;
 pub mod types;
-pub mod socket;
 
 mod stats;
 mod epollloop;
@@ -33,11 +34,9 @@ mod workerthread;
 
 /// Starts the server binding to the passed address.
 /// This is a blocking call for the life of the server.
-pub fn begin<T, K>(address: T, handler: Box<K>) where
-    T: ToSocketAddrs + Send + 'static,
-    K: EventHandler + Send + Sync + 'static {
+pub fn begin<T>(config: Config, handler: Box<T>) where
+    T: EventHandler + Send + Sync + 'static {
 
-    // Logger
     initialize_logger();
 
     // Data collection
@@ -45,7 +44,7 @@ pub fn begin<T, K>(address: T, handler: Box<K>) where
     stats::init(&mut data);
 
     // Begin server
-    epollloop::begin(address, handler);
+    epollloop::begin(config, handler);
 }
 
 /// Initializes the global logger

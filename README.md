@@ -44,7 +44,7 @@ fn main() {
     server.begin();
 }
 
-pub fn on_data_received(sockets: SocketList, socket: Socket, buffer: Vec<u8>) {
+pub fn on_data_received(sockets: StreamList, socket: Socket, buffer: Vec<u8>) {
     // This is currently needed because rustc doesn't know that everything here
     // is currently owned by this function.
     // This should be fixed once Copy is being derived for Socket struct
