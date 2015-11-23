@@ -23,6 +23,7 @@ use std::net::ToSocketAddrs;
 use types::*;
 use config::Config;
 
+pub use self::stream::frame;
 pub use self::stream::nbstream;
 pub mod config;
 pub mod types;

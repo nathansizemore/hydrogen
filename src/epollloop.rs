@@ -125,12 +125,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             let socket = Socket {
                 fd: client_fd
             };
-            let stream;
-            if config.ssl {
-                unimplemented!()
-            } else {
-                stream = Nbstream::new(socket).unwrap();
-            }
+            let stream = Nbstream::new(socket).unwrap();
 
             let stream_ptr;
             { // Begin Mutex lock
@@ -157,6 +152,8 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                 stats::conn_recv();
             }
         }
+
+        libc::free(addr_buf);
     }
 }
 
@@ -268,6 +265,7 @@ fn handle_drop_event(epfd: RawFd,
                      handler: SafeHandler) {
     epoll_remove_fd(epfd, stream.as_raw_fd());
     remove_socket_from_list(stream.id(), streams);
+    close_fd(stream.as_raw_fd());
 
     let mut guard = match handler.lock() {
         Ok(g) => g,
@@ -332,4 +330,13 @@ fn remove_socket_from_list(id: String, streams: StreamList) {
     stats::conn_lost();
 
     trace!("socket removed from list");
+}
+
+fn close_fd(fd: RawFd) {
+    unsafe {
+        let result = libc::close(fd);
+        if result < 0 {
+            error!("Error closing fd: {}", Error::from_raw_os_error(result as i32));
+        }
+    }
 }
