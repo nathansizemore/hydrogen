@@ -11,6 +11,9 @@ use std::io::{Error, ErrorKind};
 
 use libc;
 use frame;
+use rand;
+use rand::Rng;
+use errno::errno;
 use socket::Socket;
 use frame::FrameState;
 
@@ -21,23 +24,25 @@ pub struct Nbstream {
     state: FrameState,
     buffer: Vec<u8>,
     scratch: Vec<u8>,
-    tx_queue: Vec<Vec<u8>>
+    tx_queue: Vec<Vec<u8>>,
+    rx_queue: Vec<Vec<u8>>
 }
 
 impl Nbstream {
     pub fn new(stream: Socket) -> Result<Nbstream, Error> {
         let result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) };
         if result < 0 {
-            return Err(Error::from_raw_os_error(result as i32))
+            return Err(Error::from_raw_os_error(errno().0 as i32))
         }
 
         Ok(Nbstream {
-            id: "".to_string(),
+            id: rand::thread_rng().gen_ascii_chars().take(15).collect::<String>(),
             inner: stream,
             state: FrameState::Start,
             buffer: Vec::with_capacity(3),
             scratch: Vec::new(),
-            tx_queue: Vec::new()
+            tx_queue: Vec::new(),
+            rx_queue: Vec::new()
         })
     }
 
@@ -49,15 +54,25 @@ impl Nbstream {
         self.inner.as_raw_fd()
     }
 
-    pub fn recv(&mut self) -> Result<Vec<u8>, Error> {
+    pub fn state(&self) -> FrameState {
+        self.state.clone()
+    }
+
+    pub fn recv(&mut self) -> Result<(), Error> {
         loop {
             let mut buf = Vec::<u8>::with_capacity(512);
             unsafe { buf.set_len(512); }
             let result = self.inner.read(&mut buf[..]);
             if result.is_err() {
-                return Err(result.unwrap_err())
+                let err = result.unwrap_err();
+                if err.kind() == ErrorKind::WouldBlock {
+                    println!("Received WouldBlock");
+                    return Ok(())
+                }
+                return Err(err)
             }
             let num_read = result.unwrap();
+            println!("read: {}bytes", num_read);
 
             buf = self.buf_with_scratch(&buf[..], num_read);
             let mut seek_pos = 0usize;
@@ -77,7 +92,7 @@ impl Nbstream {
             if self.state == FrameState::End {
                 let result = self.read_for_frame_end(&buf[..], seek_pos, num_read);
                 if result.is_ok() {
-                    return Ok(result.unwrap())
+                    self.rx_queue.push(result.unwrap());
                 }
             }
         }
@@ -88,7 +103,7 @@ impl Nbstream {
         self.tx_queue.push(frame::from_slice(buf));
         for x in 0..self.tx_queue.len() {
             let b = self.tx_queue.remove(x);
-            let result = self.inner.write(buf);
+            let result = self.inner.write(&b[..]);
             if result.is_err() {
                 let err = result.unwrap_err();
                 if err.kind() == ErrorKind::WouldBlock {
@@ -106,6 +121,12 @@ impl Nbstream {
             }
         }
         Ok(total_written)
+    }
+
+    pub fn drain_rx_queue(&mut self) -> Vec<Vec<u8>> {
+        let buf = self.rx_queue.clone();
+        self.rx_queue = Vec::new();
+        buf
     }
 
     fn buf_with_scratch(&mut self, buf: &[u8], len: usize) -> Vec<u8> {
@@ -150,7 +171,6 @@ impl Nbstream {
         for _ in *offset..len {
             self.buffer.push(buf[*offset]);
             if self.buffer.len() == self.payload_len() + 3 {
-                self.buffer.push(buf[*offset]);
                 self.state = FrameState::End;
                 *offset += 1;
                 break;
@@ -171,6 +191,7 @@ impl Nbstream {
                 for x in 3..self.buffer.len() {
                     payload.push(self.buffer[x]);
                 }
+
                 self.state = FrameState::Start;
                 self.buffer = Vec::<u8>::with_capacity(3);
 

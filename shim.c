@@ -7,12 +7,22 @@
 
 #include <arpa/inet.h>
 
-int shim_inet_pton(int af, const char *src, void *dst)
+extern int shim_inet_pton(int af, const char *src, void *dst)
 {
     return inet_pton(af, src, dst);
 }
 
-unsigned short shim_htons(unsigned short hostshort)
+extern unsigned short shim_htons(unsigned short hostshort)
 {
     return htons(hostshort);
+}
+
+extern unsigned int shim_htonl(unsigned int addr)
+{
+    return htonl(addr);
+}
+
+extern unsigned long int shim_inaddr_any()
+{
+    return INADDR_ANY;
 }

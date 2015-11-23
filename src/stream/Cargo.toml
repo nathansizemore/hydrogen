@@ -6,3 +6,4 @@ authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
 [dependencies]
 errno = "*"
 libc = "*"
+rand = "*"

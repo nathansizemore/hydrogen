@@ -14,6 +14,7 @@ use std::ops::DerefMut;
 use std::os::unix::io::RawFd;
 use std::collections::LinkedList;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::mpsc::{
     channel,
     Sender,
@@ -21,6 +22,7 @@ use std::sync::mpsc::{
 };
 
 use libc;
+use errno::errno;
 use epoll;
 use epoll::util::*;
 use epoll::EpollEvent;
@@ -29,13 +31,15 @@ use stream::nbstream::Nbstream;
 use stats;
 use types::*;
 use resources::ResourcePool;
-use libc::{c_int, c_void, c_char, c_ushort};
+use libc::{c_int, c_void, c_char, c_ushort, c_ulong, c_uint};
 use config::Config;
 
 
 extern "C" {
     fn shim_inet_pton(af: c_int, src: *const c_char, dst: *mut c_void) -> c_int;
     fn shim_htons(hostshort: c_ushort) -> c_ushort;
+    fn shim_htonl(addr: c_uint) -> c_uint;
+    fn shim_inaddr_any() ->  c_ulong;
 }
 
 // When added to epoll, these will be the conditions of kernel notification:
@@ -57,7 +61,7 @@ const EVENTS: u32 = (
 pub fn begin<T>(config: Config, handler: Box<T>) where
     T: EventHandler + Send + Sync + 'static {
     // Master socket list
-    let sockets = Arc::new(Mutex::new(LinkedList::<Nbstream>::new()));
+    let sockets = Arc::new(Mutex::new(LinkedList::<Arc<AtomicPtr<Nbstream>>>::new()));
 
     // Epoll instance
     let result = epoll::create1(0);
@@ -109,25 +113,39 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             sin_family: libc::AF_INET as u16,
             sin_port: shim_htons(config.port),
             sin_addr: libc::in_addr {
-                s_addr: shim_inet_pton(libc::AF_INET, cstr_addr.as_ptr(), addr_buf) as u32
+                s_addr: shim_htonl(shim_inaddr_any() as u32)
             },
             sin_zero: [0u8; 8]
         };
 
         let server_fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
         let serv_addr: *const libc::sockaddr = mem::transmute(&server_addr);
-        libc::bind(server_fd, serv_addr, mem::size_of::<libc::sockaddr_in>() as u32);
-        libc::listen(server_fd, 100);
+        let bind_result = libc::bind(server_fd, serv_addr,
+            mem::size_of::<libc::sockaddr_in>() as u32);
+        if bind_result < 0 {
+            error!("Binding fd: {}", Error::from_raw_os_error(errno().0 as i32));
+            return;
+        }
+
+        let listen_result = libc::listen(server_fd, 100);
+        if listen_result < 0 {
+            error!("Listening: {}", Error::from_raw_os_error(errno().0 as i32));
+        }
 
         loop {
             let client_fd = libc::accept(server_fd,
                 ptr::null_mut() as *mut libc::sockaddr, ptr::null_mut() as *mut u32);
+
+            trace!("Received new connection");
+
+            trace!("fd: {}", client_fd);
+
             let socket = Socket {
                 fd: client_fd
             };
-            let stream = Nbstream::new(socket).unwrap();
+            let heap_stream = Box::new(Nbstream::new(socket).unwrap());
+            let wrapped_stream = Arc::new(AtomicPtr::new(Box::into_raw(heap_stream)));
 
-            let stream_ptr;
             { // Begin Mutex lock
                 let mut guard = match streams.lock() {
                     Ok(guard) => guard,
@@ -137,13 +155,20 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                     }
                 };
                 let stream_list = guard.deref_mut();
-                stream_list.push_back(stream.clone());
-                stream_ptr = stream_list.back_mut().unwrap() as *mut Nbstream;
+                stream_list.push_back(wrapped_stream);
+
+                trace!("Iterating over list for all fds...");
+                for s in stream_list.iter() {
+                    let st = s.load(Ordering::Relaxed);
+                    unsafe {
+                        trace!("fd: {}", (*st).as_raw_fd());
+                    }
+                }
             } // End Mutex lock
 
             // Add to epoll
-            let add_res = epoll::ctl(epfd, ctl_op::ADD, stream.as_raw_fd(), &mut EpollEvent {
-                data: (stream_ptr as usize) as u64,
+            let add_res = epoll::ctl(epfd, ctl_op::ADD, client_fd, &mut EpollEvent {
+                data: client_fd as u64,
                 events: EVENTS
             });
             if add_res.is_err() {
@@ -191,81 +216,118 @@ fn epoll_event_handler(epfd: RawFd,
     for event in rx.iter() {
         trace!("received epoll event");
 
-        // Move semantics are a little weird right here, so we must use clones of clones
-        // in order to make the compiler happy. This will be fixed once FnBox trait is
-        // released into stable channel.
-        let stream_ptr = event.data as *mut Nbstream;
-        if (event.events & DROP_EVENT) > 0 {
-            trace!("event was drop event");
-            let t_handler = handler.clone();
-            let stream_list = streams.clone();
-            let stream = unsafe { (*stream_ptr).clone() };
-            pool.run(move || {
-                handle_drop_event(epfd, stream.clone(), stream_list.clone(), t_handler.clone());
-            });
-        } else if (event.events & READ_EVENT) > 0 {
-            trace!("event was read event");
-            let t_handler = handler.clone();
-            let stream_list = streams.clone();
-            let stream = unsafe { (*stream_ptr).clone() };
-            let ptr_addr = stream_ptr as usize;
-            pool.run(move || {
-                handle_read_event(epfd, stream.clone(), stream_list.clone(),
-                    t_handler.clone(), ptr_addr);
-            });
-        } else { warn!("event was unknown: {}", event.data); continue; }
+        // Find the stream the event was for
+        let event_fd = event.data as RawFd;
+        trace!("event for fd: {}", event_fd);
+        let mut arc_stream: StreamPtr = unsafe { mem::transmute(0u64) };
+        let mut found = false;
+        { // Begin Mutex lock
+            let mut guard = match streams.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("StreamList Mutex failed, using anyway...");
+                    poisoned.into_inner()
+                }
+            };
+            let stream_list = guard.deref_mut();
+            for s in stream_list.iter() {
+                let mut stream = s.load(Ordering::Relaxed);
+                unsafe {
+                    let fd = (*stream).as_raw_fd();
+                    trace!("event_fd: {} fd: {}", event_fd, fd);
+                    if fd == event_fd {
+                        found = true;
+                        arc_stream = s.clone();
+                        break;
+                    }
+                }
+            }
+        } // End Mutex lock
+
+        if found {
+            // Move semantics are a little weird right here, so we must use clones of clones
+            // in order to make the compiler happy. This will be fixed once FnBox trait is
+            // released into stable channel.
+            if (event.events & DROP_EVENT) > 0 {
+                trace!("event was drop event");
+                let t_handler = handler.clone();
+                let stream_list = streams.clone();
+                pool.run(move || {
+                    handle_drop_event(epfd, arc_stream.clone(), stream_list.clone(), t_handler.clone());
+                });
+            } else if (event.events & READ_EVENT) > 0 {
+                trace!("event was read event");
+                let t_handler = handler.clone();
+                let stream_list = streams.clone();
+                pool.run(move || {
+                    handle_read_event(epfd, arc_stream.clone(), stream_list.clone(),
+                        t_handler.clone());
+                });
+            } else { warn!("event was unknown: {}", event.data); continue; }
+        } else { error!("unable to find fd...?"); }
     }
 }
 
 fn handle_read_event(epfd: RawFd,
-                     stream: Nbstream,
+                     stream_ptr: StreamPtr,
                      streams: StreamList,
-                     handler: SafeHandler,
-                     ptr_addr: usize) {
-    let mut stream = stream;
-    match stream.recv() {
-        Ok(buf) => {
-            let buf_len = buf.len();
-            { // EventHandler Mutex locked
-                let mut guard = match handler.lock() {
-                    Ok(guard) => guard,
-                    Err(poisoned) => {
-                        warn!("EventHandler Mutex failed, using anyway...");
-                        poisoned.into_inner()
-                    }
-                };
-                let e_handler = guard.deref_mut();
-                e_handler.on_data_received(stream.clone(), buf);
-            } // EventHandler Mutex unlocked
+                     handler: SafeHandler) {
+    let mut stream = stream_ptr.load(Ordering::Relaxed);
+    unsafe {
+        match (*stream).recv() {
+            Ok(_) => {
+                let rx_queue = (*stream).drain_rx_queue();
+                for payload in rx_queue.iter() {
+                    let buf_len = payload.len();
+                    { // EventHandler Mutex locked
+                        let mut guard = match handler.lock() {
+                            Ok(guard) => guard,
+                            Err(poisoned) => {
+                                warn!("EventHandler Mutex failed, using anyway...");
+                                poisoned.into_inner()
+                            }
+                        };
+                        let e_handler = guard.deref_mut();
+                        e_handler.on_data_received((*stream).clone(), payload.clone());
+                    } // EventHandler Mutex unlocked
 
-            // Collect some stats
-            stats::msg_recv();
-            stats::bytes_recv(buf_len);
-        }
-        Err(e) => {
-            if e.kind() != ErrorKind::WouldBlock {
-                handle_drop_event(epfd, stream, streams, handler);
+                    // Collect some stats
+                    stats::msg_recv();
+                    stats::bytes_recv(buf_len);
+                }
+            }
+            Err(e) => {
+                handle_drop_event(epfd, stream_ptr.clone(), streams, handler);
                 return;
             }
-        }
-    };
+        };
+        trace!("stream.state: {}", (*stream).state());
+    }
 
     // Re-enable stream in epoll watch list
-    let _ = epoll::ctl(epfd, ctl_op::MOD, stream.as_raw_fd(), &mut EpollEvent {
-        data: ptr_addr as u64,
-        events: EVENTS
-    }).map_err(|e| {
-        error!("During epoll::ctl: {}", e);
-    });
+    unsafe {
+        let result = epoll::ctl(epfd, ctl_op::MOD, (*stream).as_raw_fd(), &mut EpollEvent {
+            data: (*stream).as_raw_fd() as u64,
+            events: EVENTS
+        });
+        if result.is_ok() {
+            trace!("stream re-enabled in epoll successfully");
+        } else {
+            error!("During epoll::ctl: {}", result.unwrap_err());
+        }
+    }
 }
 
 fn handle_drop_event(epfd: RawFd,
-                     stream: Nbstream,
+                     stream_ptr: StreamPtr,
                      streams: StreamList,
                      handler: SafeHandler) {
-    epoll_remove_fd(epfd, stream.as_raw_fd());
-    remove_socket_from_list(stream.id(), streams);
-    close_fd(stream.as_raw_fd());
+    let mut stream = stream_ptr.load(Ordering::Relaxed);
+    unsafe {
+        epoll_remove_fd(epfd, (*stream).as_raw_fd());
+        remove_socket_from_list((*stream).id(), streams);
+        close_fd((*stream).as_raw_fd());
+    }
 
     let mut guard = match handler.lock() {
         Ok(g) => g,
@@ -275,7 +337,9 @@ fn handle_drop_event(epfd: RawFd,
         }
     };
     let e_handler = guard.deref_mut();
-    e_handler.on_stream_closed(stream.id());
+    unsafe {
+        e_handler.on_stream_closed((*stream).id());
+    }
 }
 
 fn epoll_remove_fd(epfd: RawFd, fd: RawFd) {
@@ -309,10 +373,13 @@ fn remove_socket_from_list(id: String, streams: StreamList) {
 
     let mut found = false;
     let mut index = 1usize;
-    for s in list.iter() {
-        if s.id() == id {
-            found = true;
-            break;
+    for s_ptr in list.iter() {
+        let mut s = s_ptr.load(Ordering::Relaxed);
+        unsafe {
+            if (*s).id() == id {
+                found = true;
+                break;
+            }
         }
         index += 1;
     }

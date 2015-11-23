@@ -7,6 +7,8 @@
 
 
 extern crate libc;
+extern crate rand;
+extern crate errno;
 
 pub mod frame;
 pub mod socket;
