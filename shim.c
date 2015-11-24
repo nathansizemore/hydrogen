@@ -7,11 +7,6 @@
 
 #include <arpa/inet.h>
 
-extern int shim_inet_pton(int af, const char *src, void *dst)
-{
-    return inet_pton(af, src, dst);
-}
-
 extern unsigned short shim_htons(unsigned short hostshort)
 {
     return htons(hostshort);

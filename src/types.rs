@@ -9,11 +9,8 @@
 //! Various types used throughout the server crate
 
 
-use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicPtr, Ordering};
 use std::collections::LinkedList;
-use std::os::unix::io::AsRawFd;
 
 use stream::nbstream::Nbstream;
 
@@ -22,10 +19,8 @@ pub trait EventHandler {
     fn on_stream_closed(&mut self, id: String);
 }
 
-/// Yeeeeeah
-pub type StreamPtr = Arc<AtomicPtr<Nbstream>>;
 /// Thread safe LinkedList<T: Stream>
-pub type StreamList = Arc<Mutex<LinkedList<StreamPtr>>>;
+pub type StreamList = Arc<Mutex<LinkedList<Nbstream>>>;
 
 /// Thread safe EventHandler
 pub type SafeHandler = Arc<Mutex<EventHandler + Send + Sync + 'static>>;

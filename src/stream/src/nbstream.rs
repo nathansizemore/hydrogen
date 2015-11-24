@@ -30,7 +30,14 @@ pub struct Nbstream {
 
 impl Nbstream {
     pub fn new(stream: Socket) -> Result<Nbstream, Error> {
-        let result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK) };
+        let mut result;
+        result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETFL, 0) };
+        if result < 0 {
+            return Err(Error::from_raw_os_error(errno().0 as i32))
+        }
+
+        let flags = result | libc::O_NONBLOCK;
+        result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFL, flags) };
         if result < 0 {
             return Err(Error::from_raw_os_error(errno().0 as i32))
         }
@@ -66,7 +73,6 @@ impl Nbstream {
             if result.is_err() {
                 let err = result.unwrap_err();
                 if err.kind() == ErrorKind::WouldBlock {
-                    println!("Received WouldBlock");
                     return Ok(())
                 }
                 return Err(err)
@@ -107,12 +113,14 @@ impl Nbstream {
             if result.is_err() {
                 let err = result.unwrap_err();
                 if err.kind() == ErrorKind::WouldBlock {
+                    println!("write received WouldBlock");
                     self.tx_queue.insert(x, b);
                 }
                 return Err(err)
             }
 
             let num_written = result.unwrap();
+            println!("wrote: {}bytes", num_written);
             total_written += num_written;
             if num_written < b.len() {
                 let remainder = self.vec_from_slice(&b[(b.len() - num_written) ..b.len()]);
