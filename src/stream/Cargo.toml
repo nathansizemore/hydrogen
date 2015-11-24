@@ -7,3 +7,5 @@ authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
 errno = "*"
 libc = "*"
 rand = "*"
+log = "*"
+fern = "*"
