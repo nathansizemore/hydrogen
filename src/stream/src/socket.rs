@@ -33,6 +33,10 @@ impl Socket {
             return Err(Error::from_raw_os_error(errno().0 as i32))
         }
 
+        if result == 0 {
+            return Err(Error::new(ErrorKind::Other, "EOF"));
+        }
+
         Ok(result as usize)
     }
 
