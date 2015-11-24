@@ -41,18 +41,12 @@ extern "C" {
 // When added to epoll, these will be the conditions of kernel notification:
 //
 // EPOLLIN      - Available for read
-// EPOLLRDHUP   - Connection has been closed
 // EPOLLONESHOT - After an event has been received, and reported, do not track
 //                further changes until explicitly told to do so.
-// EPOLLERR     - Some error occurred
-// EPOLLHUP     - Hang up happened
 const EVENTS: u32 = (
     event_type::EPOLLET | // Set fd to EdgeTrigger mode
     event_type::EPOLLIN |
-    event_type::EPOLLRDHUP |
-    event_type::EPOLLONESHOT |
-    event_type::EPOLLERR |
-    event_type::EPOLLHUP);
+    event_type::EPOLLONESHOT;
 
 pub fn begin<T>(config: Config, handler: Box<T>) where
     T: EventHandler + Send + Sync + 'static {
