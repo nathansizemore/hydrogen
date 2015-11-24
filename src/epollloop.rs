@@ -158,7 +158,8 @@ fn epoll_wait_loop(epfd: RawFd, tx_handler: Sender<EpollEvent>) {
     unsafe { events.set_len(100); }
 
     loop {
-        match epoll::wait(epfd, &mut events[..], 250) {
+        trace!("Calling epoll wait with epfd: {}", epfd);
+        match epoll::wait(epfd, &mut events[..], -1) {
             Ok(num_events) => {
                 trace!("{} events to process", num_events);
                 for x in 0..num_events as usize {
@@ -312,6 +313,7 @@ fn handle_read_event(epfd: RawFd,
     };
 
     // Re-enable stream in epoll watch list
+    trace!("Adding fd: {} back to epfd: {}", stream_fd, epfd);
     let mut event = EpollEvent {
         data: stream_fd as u64,
         events: EVENTS
