@@ -43,10 +43,7 @@ extern "C" {
 // EPOLLIN      - Available for read
 // EPOLLONESHOT - After an event has been received, and reported, do not track
 //                further changes until explicitly told to do so.
-const EVENTS: u32 = (
-    event_type::EPOLLET | // Set fd to EdgeTrigger mode
-    event_type::EPOLLIN |
-    event_type::EPOLLONESHOT;
+const EVENTS: u32 = event_type::EPOLLET | event_type::EPOLLIN | event_type::EPOLLONESHOT;
 
 pub fn begin<T>(config: Config, handler: Box<T>) where
     T: EventHandler + Send + Sync + 'static {
