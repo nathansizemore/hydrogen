@@ -60,22 +60,23 @@ impl Nbstream {
             let num_read = result.unwrap();
 
             buf = self.buf_with_scratch(&buf[..], num_read);
+            let len = buf.len();
             let mut seek_pos = 0usize;
 
             if self.state == FrameState::Start {
-                self.read_for_frame_start(&buf[..], &mut seek_pos, num_read);
+                self.read_for_frame_start(&buf[..], &mut seek_pos, len);
             }
 
             if self.state == FrameState::PayloadLen {
-                self.read_payload_len(&buf[..], &mut seek_pos, num_read);
+                self.read_payload_len(&buf[..], &mut seek_pos, len);
             }
 
             if self.state == FrameState::Payload {
-                self.read_payload(&buf[..], &mut seek_pos, num_read);
+                self.read_payload(&buf[..], &mut seek_pos, len);
             }
 
             if self.state == FrameState::End {
-                let result = self.read_for_frame_end(&buf[..], seek_pos, num_read);
+                let result = self.read_for_frame_end(&buf[..], seek_pos, len);
                 if result.is_ok() {
                     return Ok(result.unwrap())
                 }
