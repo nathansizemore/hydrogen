@@ -6,6 +6,9 @@
 // http://mozilla.org/MPL/2.0/.
 
 
+use std::fmt;
+
+
 /// Indicates start of frame
 pub const START:    u8 = 0x01;
 /// Indicates end of frame
@@ -17,6 +20,17 @@ pub enum FrameState {
     PayloadLen,
     Payload,
     End
+}
+
+impl fmt::Display for FrameState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            FrameState::Start => "Start".fmt(f),
+            FrameState::PayloadLen => "PayloadLen".fmt(f),
+            FrameState::Payload => "Payload".fmt(f),
+            FrameState::End => "End".fmt(f)
+        }
+    }
 }
 
 pub fn from_slice(slice: &[u8]) -> Vec<u8> {

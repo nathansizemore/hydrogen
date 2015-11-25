@@ -6,13 +6,12 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-extern crate libc;
-extern crate errno;
-
 use std::os::unix::io::RawFd;
 use std::io::{Error, ErrorKind};
 
-use self::libc::{c_int, c_void};
+use libc;
+use errno::errno;
+use libc::{c_int, c_void};
 
 #[derive(Clone)]
 pub struct Socket {
@@ -31,7 +30,11 @@ impl Socket {
         };
 
         if result < 0 {
-            return Err(Error::from_raw_os_error(result as i32))
+            return Err(Error::from_raw_os_error(errno().0 as i32))
+        }
+
+        if result == 0 {
+            return Err(Error::new(ErrorKind::Other, "EOF"));
         }
 
         Ok(result as usize)
@@ -43,7 +46,7 @@ impl Socket {
         };
 
         if result < 0 {
-            return Err(Error::from_raw_os_error(result as i32))
+            return Err(Error::from_raw_os_error(errno().0 as i32))
         }
 
         Ok(result as usize)

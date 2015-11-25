@@ -27,6 +27,7 @@ log = "*"
 time = "*"
 rustc-serialize = "*"
 epoll = "*"
+errno = "*"
 
 [dependencies.stream]
 path = "src/stream"

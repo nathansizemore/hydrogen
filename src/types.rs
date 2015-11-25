@@ -9,10 +9,8 @@
 //! Various types used throughout the server crate
 
 
-use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
-use std::os::unix::io::AsRawFd;
 
 use stream::nbstream::Nbstream;
 

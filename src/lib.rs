@@ -13,12 +13,12 @@ extern crate time;
 extern crate libc;
 extern crate rand;
 extern crate epoll;
+extern crate errno;
 extern crate stream;
 extern crate num_cpus;
 extern crate rustc_serialize;
 
 use std::sync::Mutex;
-use std::net::ToSocketAddrs;
 
 use types::*;
 use config::Config;
