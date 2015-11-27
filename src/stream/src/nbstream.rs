@@ -83,26 +83,27 @@ impl Nbstream {
             trace!("read: {}bytes", num_read);
 
             buf = self.buf_with_scratch(&buf[..], num_read);
+            let len = buf.len();
             let mut seek_pos = 0usize;
 
             if self.state == FrameState::Start {
                 trace!("reading for framestate::start");
-                self.read_for_frame_start(&buf[..], &mut seek_pos, num_read);
+                self.read_for_frame_start(&buf[..], &mut seek_pos, len);
             }
 
             if self.state == FrameState::PayloadLen {
                 trace!("reading for framestate::payloadlen");
-                self.read_payload_len(&buf[..], &mut seek_pos, num_read);
+                self.read_payload_len(&buf[..], &mut seek_pos, len);
             }
 
             if self.state == FrameState::Payload {
                 trace!("reading for framestate::payload");
-                self.read_payload(&buf[..], &mut seek_pos, num_read);
+                self.read_payload(&buf[..], &mut seek_pos, len);
             }
 
             if self.state == FrameState::End {
                 trace!("reading for framestate::end");
-                let result = self.read_for_frame_end(&buf[..], seek_pos, num_read);
+                let result = self.read_for_frame_end(&buf[..], seek_pos, len);
                 if result.is_ok() {
                     self.rx_queue.push(result.unwrap());
                 }
