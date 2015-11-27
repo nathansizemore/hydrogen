@@ -205,8 +205,9 @@ fn handle_epoll_event(epfd: RawFd,
 
     if (event.events & READ_EVENT) > 0 {
         trace!("event was read event");
-        handle_read_event(epfd, &mut stream, handler.clone());
-        add_stream_to_master_list(stream, streams.clone());
+        handle_read_event(epfd, &mut stream, streams.clone(), handler.clone()).map(|_| {
+            add_stream_to_master_list(stream, streams.clone());
+        });
     } else {
         trace!("event was drop event");
         handle_drop_event(epfd, &stream, streams.clone(), handler.clone());
@@ -215,7 +216,10 @@ fn handle_epoll_event(epfd: RawFd,
 
 
 
-fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) {
+fn handle_read_event(epfd: RawFd,
+                     stream: &mut Nbstream,
+                     streams: StreamList,
+                     handler: SafeHandler) -> Result<(), ()> {
     trace!("handle read event");
 
     match stream.recv() {
@@ -249,6 +253,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) {
                 stats::msg_recv();
                 stats::bytes_recv(buf_len);
             }
+            Ok(())
         }
         Err(e) => {
             error!("During read: {}", e);
@@ -263,9 +268,9 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) {
             };
             let e_handler = guard.deref_mut();
             e_handler.on_stream_closed(stream.id());
-            return;
+            Err(())
         }
-    };
+    }
 }
 
 fn handle_drop_event(epfd: RawFd,
@@ -335,7 +340,7 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
 
 /// Removes stream with id from master list
 fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
-    debug!("removing stream from master list");
+    trace!("removing fd: {} from master list", fd);
 
     let mut guard = match streams.lock() {
         Ok(guard) => guard,
@@ -356,7 +361,10 @@ fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
         index += 1;
     }
 
-    if !found { return; }
+    if !found {
+        trace!("fd: {} not found in list", fd);
+        return;
+    }
 
     if index == 1 {
         list.pop_front();
