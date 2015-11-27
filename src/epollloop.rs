@@ -39,7 +39,7 @@ static mut pool: *mut ResourcePool = 0 as *mut ResourcePool;
 // When added to epoll, these will be the conditions of kernel notification:
 //
 // EPOLLET  - Fd is in EdgeTriggered mode (notification on state changes)
-// EPOLLIN  - Data si available in kerndl buffer
+// EPOLLIN  - Data is available in kerndl buffer
 const EVENTS: u32 = event_type::EPOLLET | event_type::EPOLLIN;
 
 
@@ -52,7 +52,8 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
     let mut rp = ResourcePool::new();
     unsafe { pool = &mut rp; }
 
-    // Event handler
+    // Wrap our event handler into something that can be safely shared
+    // between threads.
     let e_handler = Arc::new(Mutex::new(*handler));
 
     // Epoll instance
@@ -163,7 +164,7 @@ fn handle_epoll_event(epfd: RawFd,
                       handler: SafeHandler) {
     const READ_EVENT: u32 = event_type::EPOLLIN;
 
-    // Locate the straem the event was for
+    // Locate the stream the event was for
     let mut stream;
     { // Mutex lock
         // Find the stream the event was for

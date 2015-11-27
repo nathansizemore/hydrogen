@@ -23,7 +23,7 @@ pub trait EventHandler {
 pub type StreamList = Arc<Mutex<LinkedList<Nbstream>>>;
 
 /// Thread safe EventHandler
-pub type SafeHandler = Arc<Mutex<EventHandler + Send + Sync + 'static>>;
+pub type SafeHandler = Arc<Mutex<EventHandler + Sized + Send + Sync + 'static>>;
 
 /// FnOnce signature for EventHandler on_data_received fn
 pub type EventHandlerFn = Arc<Mutex<(Fn() + Send + Sync + 'static)>>;
