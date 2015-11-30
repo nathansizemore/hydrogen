@@ -141,7 +141,6 @@ impl Stats {
 }
 
 impl ResourceData {
-
     /// Returns a new ResourceData
     pub fn new() -> ResourceData {
         let mut temp = ResourceData {
@@ -165,7 +164,6 @@ impl ResourceData {
 }
 
 impl RamData {
-
     /// Returns a new RamData
     pub fn new() -> RamData {
         RamData {
@@ -176,7 +174,6 @@ impl RamData {
 }
 
 impl CpuData {
-
     /// Returns a new CpuData
     pub fn new(id: usize) -> CpuData {
         CpuData {
