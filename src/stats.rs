@@ -50,16 +50,6 @@ use super::num_cpus;
 use super::rustc_serialize::json;
 
 
-// TODO - These are things I want to track
-//
-// Cpu usage
-// Ram usage
-// File descriptors
-// Current socket buffer size
-//
-
-
-// Global mutable state, ftw!
 
 /// This is set to point to an actual location passed in through the
 /// init function. It is assumed that whatever is passed in will have a static lifetime.
@@ -117,7 +107,6 @@ pub struct CpuData {
 
 
 impl Stats {
-
     /// Returns a new Stats
     pub fn new() -> Stats {
         Stats {

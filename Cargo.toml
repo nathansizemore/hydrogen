@@ -17,7 +17,6 @@ crate-type = ["staticlib", "rlib"]
 [build-dependencies]
 gcc = "*"
 
-# From crates.io
 [dependencies]
 libc = "*"
 rand = "*"
@@ -28,6 +27,3 @@ time = "*"
 rustc-serialize = "*"
 epoll = "*"
 errno = "*"
-
-[dependencies.stream]
-path = "src/stream"

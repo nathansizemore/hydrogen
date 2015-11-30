@@ -14,7 +14,6 @@ extern crate libc;
 extern crate rand;
 extern crate epoll;
 extern crate errno;
-extern crate stream;
 extern crate num_cpus;
 extern crate rustc_serialize;
 
@@ -23,8 +22,10 @@ use std::sync::Mutex;
 use types::*;
 use config::Config;
 
-pub use self::stream::frame;
-pub use self::stream::nbstream;
+pub use stream::frame;
+pub use stream::nbstream;
+
+pub mod stream;
 pub mod config;
 pub mod types;
 

@@ -6,13 +6,6 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-#[macro_use]
-extern crate log;
-extern crate fern;
-extern crate libc;
-extern crate rand;
-extern crate errno;
-
 pub mod frame;
 pub mod socket;
 pub mod nbstream;

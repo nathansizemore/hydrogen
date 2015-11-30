@@ -128,6 +128,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                 let fd = stream.as_raw_fd();
                 add_stream_to_master_list(stream, streams.clone());
                 add_to_epoll(epfd, fd, streams.clone());
+                stats::conn_recv();
             }).map_err(|e| {
                 // If we ever fail here, it is safe to assume everything else has gone to
                 // shit. No way to clean it up, so we'll just leave. The main process thread has
@@ -205,7 +206,7 @@ fn handle_epoll_event(epfd: RawFd,
 
     if (event.events & READ_EVENT) > 0 {
         trace!("event was read event");
-        handle_read_event(epfd, &mut stream, streams.clone(), handler.clone()).map(|_| {
+        let _ = handle_read_event(epfd, &mut stream, handler.clone()).map(|_| {
             add_stream_to_master_list(stream, streams.clone());
         });
     } else {
@@ -216,10 +217,7 @@ fn handle_epoll_event(epfd: RawFd,
 
 
 
-fn handle_read_event(epfd: RawFd,
-                     stream: &mut Nbstream,
-                     streams: StreamList,
-                     handler: SafeHandler) -> Result<(), ()> {
+fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) -> Result<(), ()> {
     trace!("handle read event");
 
     match stream.recv() {
@@ -336,6 +334,8 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
     }).map_err(|e| {
         warn!("Epoll CtrlError during del: {}", e)
     });
+
+    stats::conn_lost();
 }
 
 /// Removes stream with id from master list
