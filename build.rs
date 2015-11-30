@@ -8,6 +8,7 @@
 
 extern crate gcc;
 
+#[cfg(target_os = "linux")]
 fn main() {
     gcc::compile_library("libshim.a", &["shim.c"]);
 }

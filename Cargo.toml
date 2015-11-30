@@ -7,6 +7,16 @@ repository = "https://github.com/nathansizemore/hydrogen"
 readme = "README.md"
 keywords = ["presence"]
 license = "MPL 2.0"
+
+[target.x86_64-unknown-linux-gnu.package]
+name = "hydrogen"
+version = "0.1.0"
+authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
+description = "Presence system framework"
+repository = "https://github.com/nathansizemore/hydrogen"
+readme = "README.md"
+keywords = ["presence"]
+license = "MPL 2.0"
 links = "shim"
 build = "build.rs"
 
@@ -14,8 +24,12 @@ build = "build.rs"
 name = "hydrogen"
 crate-type = ["staticlib", "rlib"]
 
-[build-dependencies]
+[target.x86_64-unknown-linux-gnu.build-dependencies]
 gcc = "*"
+# native = { path = "native/x86_64" }
+
+# [build-dependencies]
+# gcc = "*"
 
 [dependencies]
 libc = "*"
