@@ -241,6 +241,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) -
                             }
                         });
                     }
+                    return Ok(())
                 }
                 // Yes, this is terrible. But, move sematics are a little shitty right now until
                 // Box<FnOnce> gets stabilized. Hopefully in 1.5?
