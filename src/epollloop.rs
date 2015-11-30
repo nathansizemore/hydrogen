@@ -222,8 +222,26 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) -
 
     match stream.recv() {
         Ok(_) => {
-            let rx_queue = stream.drain_rx_queue();
-            for payload in rx_queue.iter() {
+            let mut rx_queue = stream.drain_rx_queue();
+            for payload in rx_queue.iter_mut() {
+                // Check if this is a request for stats
+                if payload.len() == 6
+                    && payload[0] == 0x04
+                    && payload[1] == 0x04 {
+                    let u8ptr: *const u8 = &payload[2] as *const _;
+                    let f32ptr: *const f32 = u8ptr as *const _;
+                    let sec = unsafe { *f32ptr };
+                    let stream_cpy = stream.clone();
+                    unsafe {
+                        (*pool).run(move || {
+                            let mut s = stream_cpy.clone();
+                            let result = stats::as_serialized_buffer(sec);
+                            if result.is_ok() {
+                                let _ = s.send(&result.unwrap()[..]);
+                            }
+                        });
+                    }
+                }
                 // Yes, this is terrible. But, move sematics are a little shitty right now until
                 // Box<FnOnce> gets stabilized. Hopefully in 1.5?
                 // TODO - Refactor once better function passing traits are available in stable.
