@@ -10,7 +10,6 @@ extern crate log;
 extern crate fern;
 extern crate hydrogen;
 
-use hydrogen::types::*;
 use hydrogen::nbstream::Nbstream;
 
 
@@ -20,7 +19,6 @@ impl EventHandler for Server {
         // Do stuff with received data
     }
 
-    #[allow(unused_variables)]
     fn on_stream_closed(&mut self, id: String) {
         // Do any application cleanup required on connection close
     }
