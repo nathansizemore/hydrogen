@@ -5,13 +5,4 @@
 // distributed with this file, You can obtain one at
 // http://mozilla.org/MPL/2.0/.
 
-
-extern crate gcc;
-
-fn main() {
-    if cfg!(linux) {
-        gcc::compile_library("libshim.a", &["shim.c"]);
-    } else {
-        gcc::compile_library("libshim.a", &["shim-osx.c"]);
-    }
-}
+extern void shim_nothing() { }
