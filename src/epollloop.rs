@@ -87,11 +87,6 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
     let _ = prox.join();
 }
 
-#[cfg(not(target_os = "linux"))]
-#[allow(unused_variables)]
-fn listen(config: Config, epfd: RawFd, streams: StreamList) { }
-
-#[cfg(target_os = "linux")]
 fn listen(config: Config, epfd: RawFd, streams: StreamList) {
     unsafe {
         let server_addr = libc::sockaddr_in {
