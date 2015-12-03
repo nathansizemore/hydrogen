@@ -9,5 +9,6 @@
 extern crate gcc;
 
 fn main() {
+    sadf
     gcc::compile_library("libshim.a", &["shim.c"]);
 }
