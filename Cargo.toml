@@ -26,10 +26,6 @@ crate-type = ["staticlib", "rlib"]
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
 gcc = "*"
-# native = { path = "native/x86_64" }
-
-# [build-dependencies]
-# gcc = "*"
 
 [dependencies]
 libc = "*"
