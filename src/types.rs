@@ -6,24 +6,50 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-//! Various types used throughout the server crate
-
-
 use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
 
 use stream::nbstream::Nbstream;
 
+/// The `EventHandler` trait allows for hydrogen event dispatching.
+///
+/// Hydrogen uses multiple threads to dispatch events. Implementors should
+/// take care to ensure any shared state within `self` is properly safeguarded
+/// against race conditions that may occur.
 pub trait EventHandler {
     fn on_data_received(&mut self, stream: Nbstream, buffer: Vec<u8>);
     fn on_stream_closed(&mut self, id: String);
 }
 
-/// Thread safe LinkedList<T: Stream>
+/// Internal list of all currently connected streams
 pub type StreamList = Arc<Mutex<LinkedList<Nbstream>>>;
 
-/// Thread safe EventHandler
-pub type SafeHandler = Arc<Mutex<EventHandler + Sized + Send + Sync + 'static>>;
+/// Used as a strongly typed wrapper for passing around `EventHandler`
+pub struct Handler(pub *mut EventHandler);
 
-/// FnOnce signature for EventHandler on_data_received fn
-pub type EventHandlerFn = Arc<Mutex<(Fn() + Send + Sync + 'static)>>;
+unsafe impl Send for Handler {}
+unsafe impl Sync for Handler {}
+impl Clone for Handler {
+    fn clone(&self) -> Handler {
+        let Handler(ptr) = *self;
+        unsafe {
+            let same_location = &mut *ptr;
+            Handler(same_location)
+        }
+    }
+}
+
+/// Used as a strongly typed wrapper for passing around `EventHandler` functions
+pub struct Event(pub *mut Fn());
+
+unsafe impl Send for Event {}
+unsafe impl Sync for Event {}
+impl Clone for Event {
+    fn clone(&self) -> Event {
+        let Event(ptr) = *self;
+        unsafe {
+            let same_location = &mut *ptr;
+            Event(same_location)
+        }
+    }
+}

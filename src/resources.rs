@@ -6,8 +6,7 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::sync::{Arc, Mutex};
-
+use types::*;
 use num_cpus;
 use workerthread::WorkerThread;
 
@@ -60,7 +59,8 @@ impl ResourcePool {
             self.next_worker = 0;
         }
 
-        let _ = self.w_threads[self.next_worker].sender().send(Arc::new(Mutex::new(task)));
+        let event = Event(Box::into_raw(Box::new(task)));
+        let _ = self.w_threads[self.next_worker].sender().send(event);
         self.next_worker += 1;
     }
 }

@@ -6,12 +6,12 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::{ptr, mem, thread};
 use std::io::Error;
 use std::ops::DerefMut;
+use std::sync::{Arc, Mutex};
+use std::{ptr, mem, thread};
 use std::os::unix::io::RawFd;
 use std::collections::LinkedList;
-use std::sync::{Arc, Mutex};
 
 use libc;
 use errno::errno;
@@ -33,7 +33,7 @@ extern "C" {
     fn shim_inaddr_any() -> c_ulong;
 }
 
-// 100% memory safety is for wimps anyway
+// We need to be able to access our resource pool from several methods
 static mut pool: *mut ResourcePool = 0 as *mut ResourcePool;
 
 // When added to epoll, these will be the conditions of kernel notification:
@@ -42,9 +42,8 @@ static mut pool: *mut ResourcePool = 0 as *mut ResourcePool;
 // EPOLLIN  - Data is available in kerndl buffer
 const EVENTS: u32 = event_type::EPOLLET | event_type::EPOLLIN;
 
-
-pub fn begin<T>(config: Config, handler: Box<T>) where
-    T: EventHandler + Send + Sync + 'static {
+/// Starts the epoll wait and incoming connection listener threads.
+pub fn begin(config: Config, handler: Box<EventHandler>) {
     // Master socket list
     let sockets = Arc::new(Mutex::new(LinkedList::<Nbstream>::new()));
 
@@ -54,7 +53,7 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
 
     // Wrap our event handler into something that can be safely shared
     // between threads.
-    let e_handler = Arc::new(Mutex::new(*handler));
+    let e_handler = Handler(Box::into_raw(handler));
 
     // Epoll instance
     let result = epoll::create1(0);
@@ -87,6 +86,7 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
     let _ = prox.join();
 }
 
+/// Incoming connection listening thread
 fn listen(config: Config, epfd: RawFd, streams: StreamList) {
     unsafe {
         let server_addr = libc::sockaddr_in {
@@ -100,6 +100,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
 
         let server_fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
         let serv_addr: *const libc::sockaddr = mem::transmute(&server_addr);
+
         let bind_result = libc::bind(server_fd, serv_addr,
             mem::size_of::<libc::sockaddr_in>() as u32);
         if bind_result < 0 {
@@ -140,7 +141,8 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
     }
 }
 
-fn event_loop(epfd: RawFd, streams: StreamList, handler: SafeHandler) {
+/// Event loop for handling all epoll events
+fn event_loop(epfd: RawFd, streams: StreamList, handler: Handler) {
     let mut events = Vec::<EpollEvent>::with_capacity(100);
     unsafe { events.set_len(100); }
 
@@ -159,10 +161,12 @@ fn event_loop(epfd: RawFd, streams: StreamList, handler: SafeHandler) {
     }
 }
 
+/// Finds the stream the epoll event is associated with and parses the event type
+/// to hand off to specific handlers
 fn handle_epoll_event(epfd: RawFd,
                       event: &EpollEvent,
                       streams: StreamList,
-                      handler: SafeHandler) {
+                      handler: Handler) {
     const READ_EVENT: u32 = event_type::EPOLLIN;
 
     // Locate the stream the event was for
@@ -206,18 +210,22 @@ fn handle_epoll_event(epfd: RawFd,
 
     if (event.events & READ_EVENT) > 0 {
         trace!("event was read event");
-        let _ = handle_read_event(epfd, &mut stream, handler.clone()).map(|_| {
+        let _ = handle_read_event(epfd, &mut stream, handler).map(|_| {
             add_stream_to_master_list(stream, streams.clone());
         });
     } else {
         trace!("event was drop event");
-        handle_drop_event(epfd, &stream, streams.clone(), handler.clone());
+        handle_drop_event(epfd, &stream, streams.clone(), handler);
     }
 }
 
-
-
-fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) -> Result<(), ()> {
+/// Reads all available data on the stream.
+///
+/// If a complete message(s) is available, each message will be routed through the
+/// resource pool.
+///
+/// If an error occurs during the read, the stream is dropped from the server.
+fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Result<(), ()> {
     trace!("handle read event");
 
     match stream.recv() {
@@ -252,17 +260,8 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) -
                 let payload_cpy = payload.clone();
                 unsafe {
                     (*pool).run(move || {
-                        { // Mutex locked
-                            let mut guard = match handler_cpy.lock() {
-                                Ok(guard) => guard,
-                                Err(poisoned) => {
-                                    warn!("EventHandler Mutex failed, using anyway...");
-                                    poisoned.into_inner()
-                                }
-                            };
-                            let e_handler = guard.deref_mut();
-                            e_handler.on_data_received(stream_cpy.clone(), payload_cpy.clone());
-                        } // Mutex unlocked
+                        let Handler(ptr) = handler_cpy;
+                        (*ptr).on_data_received(stream_cpy.clone(), payload_cpy.clone());
                     });
                 }
 
@@ -276,44 +275,31 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: SafeHandler) -
             error!("During read: {}", e);
             remove_fd_from_epoll(epfd, stream.as_raw_fd());
             close_fd(stream.as_raw_fd());
-            let mut guard = match handler.lock() {
-                Ok(g) => g,
-                Err(p) => {
-                    warn!("EventHandler Mutex failed, using anyway...");
-                    p.into_inner()
-                }
-            };
-            let e_handler = guard.deref_mut();
-            e_handler.on_stream_closed(stream.id());
+            let Handler(ptr) = handler;
+            unsafe { (*ptr).on_stream_closed(stream.id()); }
             Err(())
         }
     }
 }
 
+/// Cleans all traces of the stream from the server
 fn handle_drop_event(epfd: RawFd,
                      stream: &Nbstream,
                      streams: StreamList,
-                     handler: SafeHandler) {
+                     handler: Handler) {
     trace!("handle drop event");
 
-    let stream_id = stream.id();
     let stream_fd = stream.as_raw_fd();
 
     remove_fd_from_epoll(epfd, stream_fd);
     remove_fd_from_list(stream_fd, streams);
     close_fd(stream_fd);
 
-    let mut guard = match handler.lock() {
-        Ok(g) => g,
-        Err(p) => {
-            warn!("EventHandler Mutex failed, using anyway...");
-            p.into_inner()
-        }
-    };
-    let e_handler = guard.deref_mut();
-    e_handler.on_stream_closed(stream_id);
+    let Handler(ptr) = handler;
+    unsafe { (*ptr).on_stream_closed(stream.id()); }
 }
 
+/// Inserts the stream back into the master list of streams
 fn add_stream_to_master_list(stream: Nbstream, streams: StreamList) {
     let mut guard = match streams.lock() {
         Ok(guard) => guard,
@@ -326,6 +312,7 @@ fn add_stream_to_master_list(stream: Nbstream, streams: StreamList) {
     stream_list.push_back(stream);
 }
 
+/// Adds a new fd to the epoll instance
 fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
     let _ = epoll::ctl(epfd, ctl_op::ADD, fd, &mut EpollEvent {
         data: fd as u64,
@@ -340,6 +327,7 @@ fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
     });
 }
 
+/// Removes a fd from the epoll instance
 fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
     debug!("removing fd from epoll");
 
@@ -394,6 +382,7 @@ fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
     }
 }
 
+/// Closes a fd with the kernel
 fn close_fd(fd: RawFd) {
     unsafe {
         let result = libc::close(fd);

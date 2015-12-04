@@ -18,6 +18,7 @@ extern crate errno;
 extern crate num_cpus;
 extern crate rustc_serialize;
 
+
 #[cfg(target_os = "linux")]
 use std::sync::Mutex;
 #[cfg(target_os = "linux")]
@@ -36,7 +37,7 @@ pub mod types;
 
 mod stats;
 #[cfg(target_os = "linux")]
-mod epollloop;
+mod server;
 #[cfg(target_os = "linux")]
 mod resources;
 #[cfg(target_os = "linux")]
@@ -56,7 +57,7 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
     stats::init(&mut data);
 
     // Begin server
-    epollloop::begin(config, handler);
+    server::begin(config, handler);
 }
 
 /// Initializes the global logger

@@ -7,7 +7,6 @@
 
 
 use std::thread;
-use std::ops::DerefMut;
 use std::sync::mpsc::{Sender, Receiver, channel};
 
 use types::*;
@@ -15,7 +14,7 @@ use types::*;
 
 pub struct WorkerThread {
     /// Sender to this threads receiver
-    tx: Sender<EventHandlerFn>
+    tx: Sender<Event>
 }
 
 
@@ -23,7 +22,7 @@ impl WorkerThread {
 
     /// Creates a new worker thread
     pub fn new() -> WorkerThread {
-        let (tx, rx): (Sender<EventHandlerFn>, Receiver<EventHandlerFn>) = channel();
+        let (tx, rx): (Sender<Event>, Receiver<Event>) = channel();
         thread::Builder::new()
             .name("WorkerThread".to_string())
             .spawn(move || {
@@ -34,17 +33,16 @@ impl WorkerThread {
     }
 
     /// Returns a clone of this thread's Sender<T>
-    pub fn sender(&self) -> Sender<EventHandlerFn> { self.tx.clone() }
+    pub fn sender(&self) -> Sender<Event> { self.tx.clone() }
 
     /// Starts the worker thread
-    fn start(rx: Receiver<EventHandlerFn>) {
-        for t in rx.iter() {
-            let mut guard = match t.lock() {
-                Ok(guard) => guard,
-                Err(poisoned) => poisoned.into_inner()
-            };
-            let task = guard.deref_mut();
-            task();
+    fn start(rx: Receiver<Event>) {
+        for event in rx.iter() {
+            let Event(ptr) = event;
+            unsafe {
+                (*ptr)();
+                Box::new(Box::from_raw(ptr));
+            }
         }
     }
 }
