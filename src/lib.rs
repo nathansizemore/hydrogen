@@ -30,7 +30,6 @@ pub use stream::frame;
 pub use stream::nbstream;
 
 pub mod stream;
-#[cfg(target_os = "linux")]
 pub mod config;
 pub mod types;
 
