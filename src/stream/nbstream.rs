@@ -45,8 +45,10 @@ impl Nbstream {
             return Err(Error::from_raw_os_error(errno().0 as i32))
         }
 
+        let id = rand::thread_rng().gen_ascii_chars().take(15).collect::<String>();
+        trace!("creating nbstream with id: {}", id);
         Ok(Nbstream {
-            id: rand::thread_rng().gen_ascii_chars().take(15).collect::<String>(),
+            id: id,
             inner: stream,
             state: FrameState::Start,
             buffer: Vec::with_capacity(3),
