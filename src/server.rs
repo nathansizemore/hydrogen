@@ -186,7 +186,7 @@ fn handle_epoll_event(epfd: RawFd,
         let mut index = 1usize;
         for s in list.iter() {
             let fd = s.as_raw_fd();
-            trace!("event_fd: {} fd: {}", event.data, fd);
+            trace!("event.fd: {} fd: {}", event.data, fd);
             if s.as_raw_fd() == event.data as RawFd {
                 found = true;
                 break;
@@ -195,7 +195,11 @@ fn handle_epoll_event(epfd: RawFd,
         }
 
         if !found {
-            error!("Could not find fd in stream list?");
+            error!("Could not find fd in stream list? Removing from epoll and closing fd");
+
+            let fd = event.data as RawFd;
+            remove_fd_from_epoll(epfd, fd);
+            close_fd(fd);
             return;
         }
 
@@ -215,7 +219,18 @@ fn handle_epoll_event(epfd: RawFd,
         });
     } else {
         trace!("event was drop event");
-        handle_drop_event(epfd, &stream, streams.clone(), handler);
+
+        let fd = stream.as_raw_fd();
+        remove_fd_from_epoll(epfd, fd);
+        close_fd(fd);
+
+        let stream_id = stream.id();
+        unsafe {
+            (*pool).run(move || {
+                let Handler(ptr) = handler;
+                (*ptr).on_stream_closed(stream_id.clone());
+            });
+        }
     }
 }
 
@@ -273,30 +288,21 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Re
         }
         Err(e) => {
             error!("During read: {}", e);
+
             remove_fd_from_epoll(epfd, stream.as_raw_fd());
             close_fd(stream.as_raw_fd());
-            let Handler(ptr) = handler;
-            unsafe { (*ptr).on_stream_closed(stream.id()); }
+
+            let stream_id = stream.id();
+            unsafe {
+                (*pool).run(move || {
+                    let Handler(ptr) = handler;
+                    (*ptr).on_stream_closed(stream_id.clone());
+                });
+            }
+
             Err(())
         }
     }
-}
-
-/// Cleans all traces of the stream from the server
-fn handle_drop_event(epfd: RawFd,
-                     stream: &Nbstream,
-                     streams: StreamList,
-                     handler: Handler) {
-    trace!("handle drop event");
-
-    let stream_fd = stream.as_raw_fd();
-
-    remove_fd_from_epoll(epfd, stream_fd);
-    remove_fd_from_list(stream_fd, streams);
-    close_fd(stream_fd);
-
-    let Handler(ptr) = handler;
-    unsafe { (*ptr).on_stream_closed(stream.id()); }
 }
 
 /// Inserts the stream back into the master list of streams
@@ -314,17 +320,20 @@ fn add_stream_to_master_list(stream: Nbstream, streams: StreamList) {
 
 /// Adds a new fd to the epoll instance
 fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
-    let _ = epoll::ctl(epfd, ctl_op::ADD, fd, &mut EpollEvent {
+    let result = epoll::ctl(epfd, ctl_op::ADD, fd, &mut EpollEvent {
         data: fd as u64,
         events: EVENTS
-    }).map(|_| {
+    });
+
+    if result.is_ok() {
         trace!("New fd added to epoll");
         stats::conn_recv();
-    }).map_err(|e| {
+    } else {
+        let e = result.unwrap_err();
         error!("CtrlError during add: {}", e);
         remove_fd_from_list(fd, streams.clone());
         close_fd(fd);
-    });
+    }
 }
 
 /// Removes a fd from the epoll instance
@@ -341,8 +350,6 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
     }).map_err(|e| {
         warn!("Epoll CtrlError during del: {}", e)
     });
-
-    stats::conn_lost();
 }
 
 /// Removes stream with id from master list
