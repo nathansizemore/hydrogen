@@ -46,7 +46,7 @@ impl Nbstream {
         }
 
         let id = rand::thread_rng().gen_ascii_chars().take(15).collect::<String>();
-        trace!("creating nbstream with id: {}", id);
+        trace!("creating nbstream: {} for fd: {}", id, stream.as_raw_fd());
         Ok(Nbstream {
             id: id,
             inner: stream,

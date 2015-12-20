@@ -186,7 +186,6 @@ fn handle_epoll_event(epfd: RawFd,
         let mut index = 1usize;
         for s in list.iter() {
             let fd = s.as_raw_fd();
-            trace!("event.fd: {} fd: {}", event.data, fd);
             if s.as_raw_fd() == event.data as RawFd {
                 found = true;
                 break;
@@ -266,8 +265,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Re
                     }
                     return Ok(())
                 }
-                // Yes, this is terrible. But, move sematics are a little shitty right now until
-                // Box<FnOnce> gets stabilized. Hopefully in 1.5?
+
                 // TODO - Refactor once better function passing traits are available in stable.
                 let buf_len = payload.len();
                 let handler_cpy = handler.clone();
@@ -287,7 +285,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Re
             Ok(())
         }
         Err(e) => {
-            error!("During read: {}", e);
+            error!("nbstream: {} fd: {} during read: {}", stream.id(), stream.as_raw_fd(), e);
 
             remove_fd_from_epoll(epfd, stream.as_raw_fd());
             close_fd(stream.as_raw_fd());
