@@ -185,7 +185,6 @@ fn handle_epoll_event(epfd: RawFd,
         let mut found = false;
         let mut index = 1usize;
         for s in list.iter() {
-            let fd = s.as_raw_fd();
             if s.as_raw_fd() == event.data as RawFd {
                 found = true;
                 break;
