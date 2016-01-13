@@ -6,8 +6,8 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::os::unix::io::RawFd;
-use std::io::{Error, ErrorKind};
+use std::os::unix::io::{RawFd, AsRawFd};
+use std::io::{Read, Write, Error, ErrorKind};
 
 use libc;
 use frame;
@@ -15,15 +15,15 @@ use rand;
 use rand::Rng;
 use errno::errno;
 
-use super::socket::Socket;
-use super::frame::FrameState;
+use stream::{HRecv, HSend, CloneHStream, HStream};
+use frame::FrameState;
 
 use super::super::stats;
 
 #[derive(Clone)]
-pub struct Nbstream {
+pub struct Nbstream<T> {
     id: String,
-    inner: Socket,
+    inner: T,
     state: FrameState,
     buffer: Vec<u8>,
     scratch: Vec<u8>,
@@ -31,8 +31,8 @@ pub struct Nbstream {
     rx_queue: Vec<Vec<u8>>
 }
 
-impl Nbstream {
-    pub fn new(stream: Socket) -> Result<Nbstream, Error> {
+impl<T: Read + Write + AsRawFd> Nbstream<T> {
+    pub fn new(stream: T) -> Result<Nbstream<T>, Error> {
         let mut result;
         result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETFL, 0) };
         if result < 0 {
@@ -57,20 +57,16 @@ impl Nbstream {
             rx_queue: Vec::new()
         })
     }
+}
 
-    pub fn id(&self) -> String {
-        self.id.clone()
-    }
-
-    pub fn as_raw_fd(&self) -> RawFd {
+impl<T: AsRawFd> AsRawFd for Nbstream<T> {
+    fn as_raw_fd(&self) -> RawFd {
         self.inner.as_raw_fd()
     }
+}
 
-    pub fn state(&self) -> FrameState {
-        self.state.clone()
-    }
-
-    pub fn recv(&mut self) -> Result<(), Error> {
+impl<T: Read + AsRawFd> HRecv for Nbstream<T> {
+    fn recv(&mut self) -> Result<(), Error> {
         loop {
             let mut buf = Vec::<u8>::with_capacity(512);
             unsafe { buf.set_len(512); }
@@ -116,7 +112,17 @@ impl Nbstream {
         }
     }
 
-    pub fn send(&mut self, buf: &[u8]) -> Result<usize, Error> {
+    fn drain_rx_queue(&mut self) -> Vec<Vec<u8>> {
+        let buf = self.rx_queue.clone();
+        self.rx_queue = Vec::new();
+        buf
+    }
+}
+
+impl<T: 'static + Read + Write + AsRawFd + Clone + Send> HStream for Nbstream<T> {}
+
+impl<T: Write + AsRawFd> HSend for Nbstream<T> {
+    fn send(&mut self, buf: &[u8]) -> Result<usize, Error> {
         let mut total_written = 0usize;
         self.tx_queue.push(frame::from_slice(buf));
         trace!("frame pushed to tx queue");
@@ -147,13 +153,9 @@ impl Nbstream {
         }
         Ok(total_written)
     }
+}
 
-    pub fn drain_rx_queue(&mut self) -> Vec<Vec<u8>> {
-        let buf = self.rx_queue.clone();
-        self.rx_queue = Vec::new();
-        buf
-    }
-
+impl<T> Nbstream<T> {
     fn buf_with_scratch(&mut self, buf: &[u8], len: usize) -> Vec<u8> {
         let mut new_buf = Vec::<u8>::with_capacity(self.scratch.len() + len);
         for byte in self.scratch.iter() {

@@ -6,8 +6,8 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::os::unix::io::RawFd;
-use std::io::{Error, ErrorKind};
+use std::os::unix::io::{RawFd, AsRawFd};
+use std::io::{Read, Write, Error, ErrorKind};
 
 use libc;
 use errno::errno;
@@ -19,8 +19,8 @@ pub struct Socket {
     pub fd: c_int
 }
 
-impl Socket {
-    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+impl Read for Socket {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         if buf.len() < 1 {
             return Err(Error::new(ErrorKind::Other, "Invalid buffer"))
         }
@@ -39,8 +39,10 @@ impl Socket {
 
         Ok(result as usize)
     }
+}
 
-    pub fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+impl Write for Socket {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         let result = unsafe {
             libc::write(self.fd, buf as *const _ as *const c_void, buf.len())
         };
@@ -52,5 +54,9 @@ impl Socket {
         Ok(result as usize)
     }
 
-    pub fn as_raw_fd(&self) -> RawFd { self.fd }
+    fn flush(&mut self) -> Result<(), Error> { Ok(()) }
+}
+
+impl AsRawFd for Socket {
+    fn as_raw_fd(&self) -> RawFd { self.fd }
 }

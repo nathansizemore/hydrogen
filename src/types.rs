@@ -6,10 +6,12 @@
 // http://mozilla.org/MPL/2.0/.
 
 
+use std::io::Error;
 use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
+use std::os::unix::io::{RawFd, AsRawFd};
 
-use stream::nbstream::Nbstream;
+use stream::{Stream, HRecv, HSend, CloneHStream, HStream};
 
 /// The `EventHandler` trait allows for hydrogen event dispatching.
 ///
@@ -17,12 +19,12 @@ use stream::nbstream::Nbstream;
 /// take care to ensure any shared state within `self` is properly safeguarded
 /// against race conditions that may occur.
 pub trait EventHandler {
-    fn on_data_received(&mut self, stream: Nbstream, buffer: Vec<u8>);
-    fn on_stream_closed(&mut self, id: String);
+    fn on_data_received(&mut self, stream: Stream, buffer: Vec<u8>);
+    fn on_stream_closed(&mut self, fd: RawFd);
 }
 
 /// Internal list of all currently connected streams
-pub type StreamList = Arc<Mutex<LinkedList<Nbstream>>>;
+pub type StreamList = Arc<Mutex<LinkedList<Stream>>>;
 
 /// Used as a strongly typed wrapper for passing around `EventHandler`
 pub struct Handler(pub *mut EventHandler);

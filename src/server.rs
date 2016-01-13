@@ -10,7 +10,7 @@ use std::io::Error;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::{ptr, mem, thread};
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{RawFd, AsRawFd};
 use std::collections::LinkedList;
 
 use libc;
@@ -20,6 +20,7 @@ use epoll::util::*;
 use epoll::EpollEvent;
 use stream::socket::Socket;
 use stream::nbstream::Nbstream;
+use stream::{Stream, HRecv, HSend, CloneHStream, HStream};
 use stats;
 use types::*;
 use resources::ResourcePool;
@@ -45,7 +46,7 @@ const EVENTS: u32 = event_type::EPOLLET | event_type::EPOLLIN;
 /// Starts the epoll wait and incoming connection listener threads.
 pub fn begin(config: Config, handler: Box<EventHandler>) {
     // Master socket list
-    let sockets = Arc::new(Mutex::new(LinkedList::<Nbstream>::new()));
+    let sockets = Arc::new(Mutex::new(LinkedList::<Stream>::new()));
 
     // Resource pool
     let mut rp = ResourcePool::new();
@@ -125,7 +126,10 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             // Create new stream
             let _ = Nbstream::new(Socket {
                 fd: result
-            }).map(|stream| {
+            }).map(|nbstream| {
+                let stream = Stream {
+                    inner: Box::new(nbstream)
+                };
                 let fd = stream.as_raw_fd();
                 add_stream_to_master_list(stream, streams.clone());
                 add_to_epoll(epfd, fd, streams.clone());
@@ -134,7 +138,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                 // If we ever fail here, it is safe to assume everything else has gone to
                 // shit. No way to clean it up, so we'll just leave. The main process thread has
                 // joined to this tread, so panic-ing will cause our parent process to end nicely.
-                error!("Creating Nbstream: {}", e);
+                error!("Creating stream: {}", e);
                 panic!()
             });
         }
@@ -222,11 +226,11 @@ fn handle_epoll_event(epfd: RawFd,
         remove_fd_from_epoll(epfd, fd);
         close_fd(fd);
 
-        let stream_id = stream.id();
+        let stream_fd = stream.as_raw_fd();
         unsafe {
             (*pool).run(move || {
                 let Handler(ptr) = handler;
-                (*ptr).on_stream_closed(stream_id.clone());
+                (*ptr).on_stream_closed(stream_fd);
             });
         }
     }
@@ -238,7 +242,7 @@ fn handle_epoll_event(epfd: RawFd,
 /// resource pool.
 ///
 /// If an error occurs during the read, the stream is dropped from the server.
-fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Result<(), ()> {
+fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Result<(), ()> {
     trace!("handle read event");
 
     match stream.recv() {
@@ -268,7 +272,9 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Re
                 // TODO - Refactor once better function passing traits are available in stable.
                 let buf_len = payload.len();
                 let handler_cpy = handler.clone();
-                let stream_cpy = stream.clone();
+                let stream_cpy = Stream {
+                    inner: stream.inner.clone_h_stream()
+                };
                 let payload_cpy = payload.clone();
                 unsafe {
                     (*pool).run(move || {
@@ -284,16 +290,16 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Re
             Ok(())
         }
         Err(e) => {
-            error!("nbstream: {} fd: {} during read: {}", stream.id(), stream.as_raw_fd(), e);
+            error!("stream.fd: {} during read: {}", stream.as_raw_fd(), e);
 
             remove_fd_from_epoll(epfd, stream.as_raw_fd());
             close_fd(stream.as_raw_fd());
 
-            let stream_id = stream.id();
+            let stream_fd = stream.as_raw_fd();
             unsafe {
                 (*pool).run(move || {
                     let Handler(ptr) = handler;
-                    (*ptr).on_stream_closed(stream_id.clone());
+                    (*ptr).on_stream_closed(stream_fd.clone());
                 });
             }
 
@@ -303,7 +309,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Nbstream, handler: Handler) -> Re
 }
 
 /// Inserts the stream back into the master list of streams
-fn add_stream_to_master_list(stream: Nbstream, streams: StreamList) {
+fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
     let mut guard = match streams.lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
