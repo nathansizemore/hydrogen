@@ -27,7 +27,7 @@ use types::*;
 use config::Config;
 
 pub use stream::frame;
-pub use stream::nbstream;
+pub use stream::Stream;
 
 pub mod stream;
 pub mod config;
