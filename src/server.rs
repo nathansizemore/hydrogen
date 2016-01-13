@@ -24,7 +24,7 @@ use stream::{Stream, HRecv, HSend, CloneHStream};
 use stats;
 use types::*;
 use resources::ResourcePool;
-use libc::{c_ushort, c_ulong, c_uint};
+use libc::{c_ushort, c_ulong, c_uint, c_int, c_void};
 use config::Config;
 
 
@@ -99,13 +99,27 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             sin_zero: [0u8; 8]
         };
 
+        // Create a server socket with the passed info for TCP/IP
         let server_fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
-        let serv_addr: *const libc::sockaddr = mem::transmute(&server_addr);
 
+        // Set the SO_REUSEADDR so that restarts after crashes do not take 5min to unbind
+        // the initial port
+        let optval: c_int = 1;
+        let opt_result = libc::setsockopt(server_fd,
+            libc::SOL_SOCKET,
+            libc::SO_REUSEADDR,
+            &optval as *const _ as *const c_void,
+            mem::size_of::<c_int>() as u32);
+        if opt_result < 0 {
+            error!("Setting SO_REUSEADDR: {}", Error::from_raw_os_error(errno().0 as i32));
+            return;
+        }
+
+        let serv_addr: *const libc::sockaddr = mem::transmute(&server_addr);
         let bind_result = libc::bind(server_fd, serv_addr,
             mem::size_of::<libc::sockaddr_in>() as u32);
         if bind_result < 0 {
-            error!("Binding fd: {}", Error::from_raw_os_error(errno().0 as i32));
+            error!("Binding fd: {} - {}", server_fd, Error::from_raw_os_error(errno().0 as i32));
             return;
         }
 

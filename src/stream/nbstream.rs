@@ -11,8 +11,6 @@ use std::io::{Read, Write, Error, ErrorKind};
 
 use libc;
 use frame;
-use rand;
-use rand::Rng;
 use errno::errno;
 
 use stream::{HRecv, HSend, HStream};
@@ -22,7 +20,6 @@ use super::super::stats;
 
 #[derive(Clone)]
 pub struct Nbstream<T> {
-    id: String,
     inner: T,
     state: FrameState,
     buffer: Vec<u8>,
@@ -45,10 +42,8 @@ impl<T: Read + Write + AsRawFd> Nbstream<T> {
             return Err(Error::from_raw_os_error(errno().0 as i32))
         }
 
-        let id = rand::thread_rng().gen_ascii_chars().take(15).collect::<String>();
-        trace!("creating nbstream: {} for fd: {}", id, stream.as_raw_fd());
+        trace!("creating nbstream for fd: {}", stream.as_raw_fd());
         Ok(Nbstream {
-            id: id,
             inner: stream,
             state: FrameState::Start,
             buffer: Vec::with_capacity(3),
