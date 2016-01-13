@@ -15,7 +15,7 @@ use rand;
 use rand::Rng;
 use errno::errno;
 
-use stream::{HRecv, HSend, CloneHStream, HStream};
+use stream::{HRecv, HSend, HStream};
 use frame::FrameState;
 
 use super::super::stats;

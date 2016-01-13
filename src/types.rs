@@ -6,12 +6,11 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::io::Error;
 use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
-use std::os::unix::io::{RawFd, AsRawFd};
+use std::os::unix::io::RawFd;
 
-use stream::{Stream, HRecv, HSend, CloneHStream, HStream};
+use stream::Stream;
 
 /// The `EventHandler` trait allows for hydrogen event dispatching.
 ///

@@ -7,7 +7,7 @@
 
 
 use std::os::unix::io::{RawFd, AsRawFd};
-use std::io::{Read, Write, Error, ErrorKind};
+use std::io::Error;
 
 
 pub mod frame;

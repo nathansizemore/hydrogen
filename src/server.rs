@@ -20,7 +20,7 @@ use epoll::util::*;
 use epoll::EpollEvent;
 use stream::socket::Socket;
 use stream::nbstream::Nbstream;
-use stream::{Stream, HRecv, HSend, CloneHStream, HStream};
+use stream::{Stream, HRecv, HSend, CloneHStream};
 use stats;
 use types::*;
 use resources::ResourcePool;
