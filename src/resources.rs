@@ -16,12 +16,11 @@ pub struct ResourcePool {
     /// Collection of threads
     w_threads: Vec<WorkerThread>,
     /// Backlog queue
-    next_worker: usize
+    next_worker: usize,
 }
 
 
 impl ResourcePool {
-
     /// Creates a new pool of worker threads
     pub fn new() -> ResourcePool {
         // At this time, the following threads have been accounted for:
@@ -49,7 +48,7 @@ impl ResourcePool {
 
         ResourcePool {
             w_threads: w_threads,
-            next_worker: 0
+            next_worker: 0,
         }
     }
 

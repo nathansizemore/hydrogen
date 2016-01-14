@@ -47,8 +47,9 @@ mod workerthread;
 /// Starts the server binding to the passed address.
 /// This is a blocking call for the life of the server.
 #[cfg(target_os = "linux")]
-pub fn begin<T>(config: Config, handler: Box<T>) where
-    T: EventHandler + Send + Sync + 'static {
+pub fn begin<T>(config: Config, handler: Box<T>)
+    where T: EventHandler + Send + Sync + 'static
+{
 
     initialize_logger();
 
@@ -64,12 +65,22 @@ pub fn begin<T>(config: Config, handler: Box<T>) where
 #[cfg(target_os = "linux")]
 fn initialize_logger() {
     let _ = fern::init_global_logger(fern::DispatchConfig {
-        format: Box::new(|msg: &str, level: &log::LogLevel, _location: &log::LogLocation| {
-            format!("[{}][{}] {}", time::now().strftime("%Y-%m-%d][%H:%M:%S").unwrap(), level, msg)
-        }),
-        output: vec![fern::OutputConfig::stdout(), fern::OutputConfig::file("/var/log/hydrogen.log")],
-        level: log::LogLevelFilter::Trace,
-    }, log::LogLevelFilter::Trace);
+                                         format: Box::new(|msg: &str,
+                                                           level: &log::LogLevel,
+                                                           _location: &log::LogLocation| {
+                                             format!("[{}][{}] {}",
+                                                     time::now()
+                                                         .strftime("%Y-%m-%d][%H:%M:%S")
+                                                         .unwrap(),
+                                                     level,
+                                                     msg)
+                                         }),
+                                         output: vec![fern::OutputConfig::stdout(),
+                                                      fern::OutputConfig::file("/var/log/hydrogen\
+                                                                                .log")],
+                                         level: log::LogLevelFilter::Trace,
+                                     },
+                                     log::LogLevelFilter::Trace);
 
     info!("Logger initialized. \nLog file: /var/log/hydrogen.log");
 }

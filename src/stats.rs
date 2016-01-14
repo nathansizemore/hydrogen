@@ -76,7 +76,7 @@ pub struct Stats {
     /// Current number of connected clients
     num_clients: u32,
     /// Resource usage (ram/cpu)
-    resources: ResourceData
+    resources: ResourceData,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
@@ -86,7 +86,7 @@ pub struct ResourceData {
     /// Overall CPU performance
     pub cpu_overall: f32,
     /// Collection of cpu data per core/cpu
-    pub cpu_per_core: Vec<CpuData>
+    pub cpu_per_core: Vec<CpuData>,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
@@ -94,7 +94,7 @@ pub struct RamData {
     /// Bytes currently in use
     pub bytes_used: u64,
     /// Bytes currently available
-    pub bytes_available: u64
+    pub bytes_available: u64,
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
@@ -102,7 +102,7 @@ pub struct CpuData {
     /// Core id
     core: u8,
     /// Amount being used
-    using: f32
+    using: f32,
 }
 
 
@@ -116,7 +116,7 @@ impl Stats {
             msg_recv: 0u64,
             msg_sent: 0u64,
             num_clients: 0u32,
-            resources: ResourceData::new()
+            resources: ResourceData::new(),
         }
     }
 
@@ -146,7 +146,7 @@ impl ResourceData {
         let mut temp = ResourceData {
             ram: RamData::new(),
             cpu_overall: 0.0f32,
-            cpu_per_core: Vec::new()
+            cpu_per_core: Vec::new(),
         };
 
         let num = num_cpus::get();
@@ -168,7 +168,7 @@ impl RamData {
     pub fn new() -> RamData {
         RamData {
             bytes_used: 0u64,
-            bytes_available: 0u64
+            bytes_available: 0u64,
         }
     }
 }
@@ -178,7 +178,7 @@ impl CpuData {
     pub fn new(id: usize) -> CpuData {
         CpuData {
             core: id as u8,
-            using: 0.0f32
+            using: 0.0f32,
         }
     }
 
@@ -338,13 +338,13 @@ pub fn as_serialized_buffer(perf_sec: f32) -> Result<Vec<u8>, ()> {
     // Grab CPU performance stats
     let (overall, cores) = match cpu_usage_for_secs(perf_sec) {
         Ok((o, c)) => (o, c),
-        Err(_) => panic!("Unable to retrieve CPU stats...?")
+        Err(_) => panic!("Unable to retrieve CPU stats...?"),
     };
 
     // Grab RAM stats
     let ram_stats = match get_current_ram_usage() {
         Ok(ram) => ram,
-        Err(_) => panic!("Unable to retrieve RAM stats...?")
+        Err(_) => panic!("Unable to retrieve RAM stats...?"),
     };
 
     d_clone.resources.ram = ram_stats;
@@ -372,21 +372,24 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
 
     // Detailed information about /proc/stat can be found here:
     // http://www.linuxhowtos.org/System/procstat.htm
-    let output_1 = Command::new("cat").arg("/proc/stat")
-        .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+    let output_1 = Command::new("cat")
+                       .arg("/proc/stat")
+                       .output()
+                       .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
     // Sleep for sec
     thread::sleep_ms((sec * 1000.0f32) as u32);
-    let output_2 = Command::new("cat").arg("/proc/stat")
-        .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+    let output_2 = Command::new("cat")
+                       .arg("/proc/stat")
+                       .output()
+                       .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
     // Sleep for sec
     thread::sleep_ms((sec * 1000.0f32) as u32);
-    let output_3 = Command::new("cat").arg("/proc/stat")
-        .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+    let output_3 = Command::new("cat")
+                       .arg("/proc/stat")
+                       .output()
+                       .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
     // Unfortunately, output.stdout will be a Vec<u8> instead of a string
     // I don't really care to parse based on anything specifically, so we're
@@ -428,9 +431,8 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
     // +-------+------------+-------------------------------------------------------+
     let mut stat_deltas = Vec::<Vec<u64>>::with_capacity(3);
     for ((line_1, line_2), line_3) in stat_lines_1.iter()
-                                        .zip(stat_lines_2.iter())
-                                        .zip(stat_lines_3.iter())
-    {
+                                                  .zip(stat_lines_2.iter())
+                                                  .zip(stat_lines_3.iter()) {
         let this_line_1: Vec<&str> = line_1.split_whitespace().collect();
         let this_line_2: Vec<&str> = line_2.split_whitespace().collect();
         let this_line_3: Vec<&str> = line_3.split_whitespace().collect();
@@ -471,24 +473,26 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
         trace!("idle_3: {}", idle_3);
 
         let mut cpu_delta = Vec::<u64>::with_capacity(4);
-        unsafe { cpu_delta.set_len(4); }
+        unsafe {
+            cpu_delta.set_len(4);
+        }
 
         // Eat it, arithmetic overflows...
         match (user_3 - user_2) - (user_2 - user_1) {
             x if x < 0 => cpu_delta[0] = (x * -1) as u64,
-            x => cpu_delta[0] = x as u64
+            x => cpu_delta[0] = x as u64,
         };
         match (nice_3 - nice_2) - (nice_2 - nice_1) {
             x if x < 0 => cpu_delta[1] = (x * -1) as u64,
-            x => cpu_delta[1] = x as u64
+            x => cpu_delta[1] = x as u64,
         };
         match (system_3 - system_2) - (system_2 - system_1) {
             x if x < 0 => cpu_delta[2] = (x * -1) as u64,
-            x => cpu_delta[2] = x as u64
+            x => cpu_delta[2] = x as u64,
         };
         match (idle_3 - idle_2) - (idle_2 - idle_1) {
             x if x < 0 => cpu_delta[3] = (x * -1) as u64,
-            x => cpu_delta[3] = x as u64
+            x => cpu_delta[3] = x as u64,
         };
 
         stat_deltas.push(cpu_delta);
@@ -496,15 +500,15 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
 
     // Get clock ticks per sec
     trace!("getting clk_tcks");
-    let output = Command::new("getconf").arg("CLK_TCK")
-        .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+    let output = Command::new("getconf")
+                     .arg("CLK_TCK")
+                     .output()
+                     .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
-    trace!("getconf CLK_TCK: {}", String::from_utf8_lossy(&output.stdout));
+    trace!("getconf CLK_TCK: {}",
+           String::from_utf8_lossy(&output.stdout));
 
-    let clk_tck = u32::from_str(
-            str::from_utf8(&output.stdout).unwrap().trim())
-            .unwrap();
+    let clk_tck = u32::from_str(str::from_utf8(&output.stdout).unwrap().trim()).unwrap();
 
     let mut cores = Vec::<CpuData>::with_capacity(num_cpus::get());
 
@@ -515,9 +519,11 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
         let divisor = stat_delta[0] + stat_delta[1] + stat_delta[2] + stat_delta[3];
 
         let usage: f32 = (dividend as f32 / divisor as f32) * (clk_tck as f32 * sec) as f32;
-        if x == 0 { // Overall
+        if x == 0 {
+            // Overall
             overall = usage;
-        } else { // Core x
+        } else {
+            // Core x
             let mut core = CpuData::new(x);
             core.set_usage(usage);
             cores.push(core);
@@ -533,9 +539,10 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
     // Read from /proc/meminfo
     // For more info on stdout from command, see here:
     // https://github.com/torvalds/linux/blob/master/Documentation/filesystems/proc.txt#L801
-    let output = Command::new("cat").arg("/proc/meminfo")
-        .output()
-        .unwrap_or_else(|e| { panic!("failed to execute process: {}", e) });
+    let output = Command::new("cat")
+                     .arg("/proc/meminfo")
+                     .output()
+                     .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
     // Unfortunately, output.stdout will be a Vec<u8> instead of a string
     // I don't really care to parse based on anything specifically, so we're
@@ -554,13 +561,15 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
     let mut total = 0u64;
     let mut free = 0u64;
     for line in meminfo_lines.iter() {
-        if line.contains("MemTotal") { // Total available
+        if line.contains("MemTotal") {
+            // Total available
             let line_split: Vec<&str> = line.split_whitespace().collect();
             trace!("assigning total: {}", line_split[1]);
             // /proc/meminfo currently displays in kb
             total = u64::from_str(line_split[1]).unwrap() * 1024u64;
             num_found += 1;
-        } else if line.contains("MemFree") { // Total available for new application
+        } else if line.contains("MemFree") {
+            // Total available for new application
             let line_split: Vec<&str> = line.split_whitespace().collect();
             trace!("assigning free: {}", line_split[1]);
             // /proc/meminfo currently displays in kb
@@ -582,6 +591,6 @@ fn get_current_ram_usage() -> Result<RamData, ()> {
     let used = total - free;
     Ok(RamData {
         bytes_used: used,
-        bytes_available: total
+        bytes_available: total,
     })
 }

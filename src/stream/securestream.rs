@@ -27,7 +27,7 @@ pub struct SecureStream<T: Read + Write + AsRawFd> {
     buffer: Vec<u8>,
     scratch: Vec<u8>,
     tx_queue: Vec<Vec<u8>>,
-    rx_queue: Vec<Vec<u8>>
+    rx_queue: Vec<Vec<u8>>,
 }
 
 impl<T: Read + Write + AsRawFd> SecureStream<T> {
@@ -35,13 +35,13 @@ impl<T: Read + Write + AsRawFd> SecureStream<T> {
         let mut result;
         result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETFL, 0) };
         if result < 0 {
-            return Err(Error::from_raw_os_error(errno().0 as i32))
+            return Err(Error::from_raw_os_error(errno().0 as i32));
         }
 
         let flags = result | libc::O_NONBLOCK;
         result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFL, flags) };
         if result < 0 {
-            return Err(Error::from_raw_os_error(errno().0 as i32))
+            return Err(Error::from_raw_os_error(errno().0 as i32));
         }
 
         trace!("creating securestream for fd: {}", stream.as_raw_fd());
@@ -51,7 +51,7 @@ impl<T: Read + Write + AsRawFd> SecureStream<T> {
             buffer: Vec::with_capacity(3),
             scratch: Vec::new(),
             tx_queue: Vec::new(),
-            rx_queue: Vec::new()
+            rx_queue: Vec::new(),
         })
     }
 }
@@ -66,16 +66,18 @@ impl<T: Read + Write + AsRawFd> HRecv for SecureStream<T> {
     fn recv(&mut self) -> Result<(), Error> {
         loop {
             let mut buf = Vec::<u8>::with_capacity(512);
-            unsafe { buf.set_len(512); }
+            unsafe {
+                buf.set_len(512);
+            }
             let result = self.inner.ssl_read(&mut buf[..]);
             if result.is_err() {
                 let err = result.unwrap_err();
                 match err {
                     SslStreamError::WantRead(_) => {
                         trace!("read received WouldBlock");
-                        return Ok(())
+                        return Ok(());
                     }
-                    _ => return Err(Error::new(ErrorKind::Other, "SslRead"))
+                    _ => return Err(Error::new(ErrorKind::Other, "SslRead")),
                 };
             }
             let num_read = result.unwrap();
@@ -148,9 +150,9 @@ impl<T: Read + Write + AsRawFd> HSend for SecureStream<T> {
             total_written += num_written;
             if num_written < b.len() {
                 trace!("wrote less than buf.len, adding remainder to tx_queue");
-                let remainder = self.vec_from_slice(&b[(b.len() - num_written) ..b.len()]);
+                let remainder = self.vec_from_slice(&b[(b.len() - num_written)..b.len()]);
                 self.tx_queue.insert(x, remainder);
-                return Ok(total_written)
+                return Ok(total_written);
             }
         }
         Ok(total_written)
@@ -208,11 +210,7 @@ impl<T: Read + Write + AsRawFd> SecureStream<T> {
         }
     }
 
-    fn read_for_frame_end(&mut self,
-                          buf: &[u8],
-                          offset: usize,
-                          len: usize)
-                          -> Result<Vec<u8>, ()> {
+    fn read_for_frame_end(&mut self, buf: &[u8], offset: usize, len: usize) -> Result<Vec<u8>, ()> {
         if offset < len {
             let expected_end_byte = buf[offset];
             if expected_end_byte == frame::END {
@@ -232,7 +230,7 @@ impl<T: Read + Write + AsRawFd> SecureStream<T> {
                 for x in offset..len {
                     self.scratch.push(buf[x]);
                 }
-                return Ok(payload)
+                return Ok(payload);
             }
 
             // If we're here, the frame was wrong. Maybe our fault, who knows?

@@ -15,5 +15,5 @@ pub struct Config {
     pub use_ssl: bool,
     pub ssl_cert: &'static str,
     pub ssl_key: &'static str,
-    pub log_level: LogLevelFilter
+    pub log_level: LogLevelFilter,
 }

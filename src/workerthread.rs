@@ -14,12 +14,11 @@ use types::*;
 
 pub struct WorkerThread {
     /// Sender to this threads receiver
-    tx: Sender<Event>
+    tx: Sender<Event>,
 }
 
 
 impl WorkerThread {
-
     /// Creates a new worker thread
     pub fn new() -> WorkerThread {
         let (tx, rx): (Sender<Event>, Receiver<Event>) = channel();
@@ -27,13 +26,16 @@ impl WorkerThread {
             .name("WorkerThread".to_string())
             .spawn(move || {
                 WorkerThread::start(rx);
-            }).unwrap();
+            })
+            .unwrap();
 
         WorkerThread { tx: tx }
     }
 
     /// Returns a clone of this thread's Sender<T>
-    pub fn sender(&self) -> Sender<Event> { self.tx.clone() }
+    pub fn sender(&self) -> Sender<Event> {
+        self.tx.clone()
+    }
 
     /// Starts the worker thread
     fn start(rx: Receiver<Event>) {

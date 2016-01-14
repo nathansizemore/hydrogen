@@ -59,7 +59,9 @@ pub fn begin(config: Config, handler: Box<EventHandler>) {
 
     // Resource pool
     let mut rp = ResourcePool::new();
-    unsafe { pool = &mut rp; }
+    unsafe {
+        pool = &mut rp;
+    }
 
     // Wrap our event handler into something that can be safely shared
     // between threads.
@@ -81,16 +83,18 @@ pub fn begin(config: Config, handler: Box<EventHandler>) {
         .name("Epoll Wait".to_string())
         .spawn(move || {
             event_loop(epfd2, streams2, e_handler);
-        }).unwrap();
+        })
+        .unwrap();
 
     // New connection thread
     let epfd3 = epfd.clone();
     let streams3 = sockets.clone();
     let prox = thread::Builder::new()
-        .name("TCP Incoming Listener".to_string())
-        .spawn(move || {
-            listen(config, epfd3, streams3);
-        }).unwrap();
+                   .name("TCP Incoming Listener".to_string())
+                   .spawn(move || {
+                       listen(config, epfd3, streams3);
+                   })
+                   .unwrap();
 
     // Stay alive forever, or at least we hope
     let _ = prox.join();
@@ -102,10 +106,8 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
         let server_addr = libc::sockaddr_in {
             sin_family: libc::AF_INET as u16,
             sin_port: shim_htons(config.port),
-            sin_addr: libc::in_addr {
-                s_addr: shim_htonl(shim_inaddr_any() as u32)
-            },
-            sin_zero: [0u8; 8]
+            sin_addr: libc::in_addr { s_addr: shim_htonl(shim_inaddr_any() as u32) },
+            sin_zero: [0u8; 8],
         };
 
         // Create a server socket with the passed info for TCP/IP
@@ -115,20 +117,24 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
         // the initial port
         let optval: c_int = 1;
         let opt_result = libc::setsockopt(server_fd,
-            libc::SOL_SOCKET,
-            libc::SO_REUSEADDR,
-            &optval as *const _ as *const c_void,
-            mem::size_of::<c_int>() as u32);
+                                          libc::SOL_SOCKET,
+                                          libc::SO_REUSEADDR,
+                                          &optval as *const _ as *const c_void,
+                                          mem::size_of::<c_int>() as u32);
         if opt_result < 0 {
-            error!("Setting SO_REUSEADDR: {}", Error::from_raw_os_error(errno().0 as i32));
+            error!("Setting SO_REUSEADDR: {}",
+                   Error::from_raw_os_error(errno().0 as i32));
             return;
         }
 
         let serv_addr: *const libc::sockaddr = mem::transmute(&server_addr);
-        let bind_result = libc::bind(server_fd, serv_addr,
-            mem::size_of::<libc::sockaddr_in>() as u32);
+        let bind_result = libc::bind(server_fd,
+                                     serv_addr,
+                                     mem::size_of::<libc::sockaddr_in>() as u32);
         if bind_result < 0 {
-            error!("Binding fd: {} - {}", server_fd, Error::from_raw_os_error(errno().0 as i32));
+            error!("Binding fd: {} - {}",
+                   server_fd,
+                   Error::from_raw_os_error(errno().0 as i32));
             return;
         }
 
@@ -148,12 +154,10 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             let mut context = ctx_result.unwrap();
 
             context.set_cipher_list("DEFAULT").unwrap();
-            context.set_certificate_file(
-                &Path::new(config.ssl_cert),
-                X509FileType::PEM).unwrap();
-            context.set_private_key_file(
-                &Path::new(config.ssl_key),
-                X509FileType::PEM).unwrap();
+            context.set_certificate_file(&Path::new(config.ssl_cert), X509FileType::PEM)
+                   .unwrap();
+            context.set_private_key_file(&Path::new(config.ssl_key), X509FileType::PEM)
+                   .unwrap();
             context.set_verify(SSL_VERIFY_NONE, None);
 
             ssl_context = &mut context;
@@ -162,9 +166,11 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
         loop {
             // Accept new client
             let result = libc::accept(server_fd,
-                ptr::null_mut() as *mut libc::sockaddr, ptr::null_mut() as *mut u32);
+                                      ptr::null_mut() as *mut libc::sockaddr,
+                                      ptr::null_mut() as *mut u32);
             if result < 0 {
-                error!("Accepting new connection: {}", Error::from_raw_os_error(result as i32));
+                error!("Accepting new connection: {}",
+                       Error::from_raw_os_error(result as i32));
             }
 
             // Create new stream and add to server
@@ -214,7 +220,9 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
 /// Event loop for handling all epoll events
 fn event_loop(epfd: RawFd, streams: StreamList, handler: Handler) {
     let mut events = Vec::<EpollEvent>::with_capacity(100);
-    unsafe { events.set_len(100); }
+    unsafe {
+        events.set_len(100);
+    }
 
     loop {
         match epoll::wait(epfd, &mut events[..], -1) {
@@ -233,15 +241,13 @@ fn event_loop(epfd: RawFd, streams: StreamList, handler: Handler) {
 
 /// Finds the stream the epoll event is associated with and parses the event type
 /// to hand off to specific handlers
-fn handle_epoll_event(epfd: RawFd,
-                      event: &EpollEvent,
-                      streams: StreamList,
-                      handler: Handler) {
+fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, handler: Handler) {
     const READ_EVENT: u32 = event_type::EPOLLIN;
 
     // Locate the stream the event was for
     let mut stream;
-    { // Mutex lock
+    {
+        // Mutex lock
         // Find the stream the event was for
         let mut guard = match streams.lock() {
             Ok(guard) => guard,
@@ -316,9 +322,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
             let mut rx_queue = stream.drain_rx_queue();
             for payload in rx_queue.iter_mut() {
                 // Check if this is a request for stats
-                if payload.len() == 6
-                    && payload[0] == 0x04
-                    && payload[1] == 0x04 {
+                if payload.len() == 6 && payload[0] == 0x04 && payload[1] == 0x04 {
                     let u8ptr: *const u8 = &payload[2] as *const _;
                     let f32ptr: *const f32 = u8ptr as *const _;
                     let sec = unsafe { *f32ptr };
@@ -332,15 +336,13 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
                             }
                         });
                     }
-                    return Ok(())
+                    return Ok(());
                 }
 
                 // TODO - Refactor once better function passing traits are available in stable.
                 let buf_len = payload.len();
                 let handler_cpy = handler.clone();
-                let stream_cpy = Stream {
-                    inner: stream.inner.clone_h_stream()
-                };
+                let stream_cpy = Stream { inner: stream.inner.clone_h_stream() };
                 let payload_cpy = payload.clone();
                 unsafe {
                     (*pool).run(move || {
@@ -389,10 +391,13 @@ fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
 
 /// Adds a new fd to the epoll instance
 fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
-    let result = epoll::ctl(epfd, ctl_op::ADD, fd, &mut EpollEvent {
-        data: fd as u64,
-        events: EVENTS
-    });
+    let result = epoll::ctl(epfd,
+                            ctl_op::ADD,
+                            fd,
+                            &mut EpollEvent {
+                                data: fd as u64,
+                                events: EVENTS,
+                            });
 
     if result.is_ok() {
         trace!("New fd added to epoll");
@@ -413,12 +418,14 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
     // a non-null pointer in event, even though this argument is ignored.
     // Since Linux 2.6.9, event can be specified as NULL when using
     // EPOLL_CTL_DEL. We'll be as backwards compatible as possible.
-    let _ = epoll::ctl(epfd, ctl_op::DEL, fd, &mut EpollEvent {
-        data: 0 as u64,
-        events: 0 as u32
-    }).map_err(|e| {
-        warn!("Epoll CtrlError during del: {}", e)
-    });
+    let _ = epoll::ctl(epfd,
+                       ctl_op::DEL,
+                       fd,
+                       &mut EpollEvent {
+                           data: 0 as u64,
+                           events: 0 as u32,
+                       })
+                .map_err(|e| warn!("Epoll CtrlError during del: {}", e));
 }
 
 /// Removes stream with id from master list
@@ -463,7 +470,8 @@ fn close_fd(fd: RawFd) {
     unsafe {
         let result = libc::close(fd);
         if result < 0 {
-            error!("Error closing fd: {}", Error::from_raw_os_error(result as i32));
+            error!("Error closing fd: {}",
+                   Error::from_raw_os_error(result as i32));
             return;
         }
     }

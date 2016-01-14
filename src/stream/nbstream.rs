@@ -25,7 +25,7 @@ pub struct Nbstream<T> {
     buffer: Vec<u8>,
     scratch: Vec<u8>,
     tx_queue: Vec<Vec<u8>>,
-    rx_queue: Vec<Vec<u8>>
+    rx_queue: Vec<Vec<u8>>,
 }
 
 impl<T: Read + Write + AsRawFd> Nbstream<T> {
@@ -33,13 +33,13 @@ impl<T: Read + Write + AsRawFd> Nbstream<T> {
         let mut result;
         result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_GETFL, 0) };
         if result < 0 {
-            return Err(Error::from_raw_os_error(errno().0 as i32))
+            return Err(Error::from_raw_os_error(errno().0 as i32));
         }
 
         let flags = result | libc::O_NONBLOCK;
         result = unsafe { libc::fcntl(stream.as_raw_fd(), libc::F_SETFL, flags) };
         if result < 0 {
-            return Err(Error::from_raw_os_error(errno().0 as i32))
+            return Err(Error::from_raw_os_error(errno().0 as i32));
         }
 
         trace!("creating nbstream for fd: {}", stream.as_raw_fd());
@@ -49,7 +49,7 @@ impl<T: Read + Write + AsRawFd> Nbstream<T> {
             buffer: Vec::with_capacity(3),
             scratch: Vec::new(),
             tx_queue: Vec::new(),
-            rx_queue: Vec::new()
+            rx_queue: Vec::new(),
         })
     }
 }
@@ -64,15 +64,17 @@ impl<T: Read + AsRawFd> HRecv for Nbstream<T> {
     fn recv(&mut self) -> Result<(), Error> {
         loop {
             let mut buf = Vec::<u8>::with_capacity(512);
-            unsafe { buf.set_len(512); }
+            unsafe {
+                buf.set_len(512);
+            }
             let result = self.inner.read(&mut buf[..]);
             if result.is_err() {
                 let err = result.unwrap_err();
                 if err.kind() == ErrorKind::WouldBlock {
                     trace!("read received WouldBlock");
-                    return Ok(())
+                    return Ok(());
                 }
-                return Err(err)
+                return Err(err);
             }
             let num_read = result.unwrap();
 
@@ -131,7 +133,7 @@ impl<T: Write + AsRawFd> HSend for Nbstream<T> {
                     trace!("write received WouldBlock");
                     self.tx_queue.insert(x, b);
                 }
-                return Err(err)
+                return Err(err);
             }
 
             let num_written = result.unwrap();
@@ -141,9 +143,9 @@ impl<T: Write + AsRawFd> HSend for Nbstream<T> {
             total_written += num_written;
             if num_written < b.len() {
                 trace!("wrote less than buf.len, adding remainder to tx_queue");
-                let remainder = self.vec_from_slice(&b[(b.len() - num_written) ..b.len()]);
+                let remainder = self.vec_from_slice(&b[(b.len() - num_written)..b.len()]);
                 self.tx_queue.insert(x, remainder);
-                return Ok(total_written)
+                return Ok(total_written);
             }
         }
         Ok(total_written)
@@ -201,11 +203,7 @@ impl<T> Nbstream<T> {
         }
     }
 
-    fn read_for_frame_end(&mut self,
-                          buf: &[u8],
-                          offset: usize,
-                          len: usize)
-                          -> Result<Vec<u8>, ()> {
+    fn read_for_frame_end(&mut self, buf: &[u8], offset: usize, len: usize) -> Result<Vec<u8>, ()> {
         if offset < len {
             let expected_end_byte = buf[offset];
             if expected_end_byte == frame::END {
@@ -225,7 +223,7 @@ impl<T> Nbstream<T> {
                 for x in offset..len {
                     self.scratch.push(buf[x]);
                 }
-                return Ok(payload)
+                return Ok(payload);
             }
 
             // If we're here, the frame was wrong. Maybe our fault, who knows?

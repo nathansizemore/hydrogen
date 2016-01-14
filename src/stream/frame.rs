@@ -10,16 +10,16 @@ use std::fmt;
 
 
 /// Indicates start of frame
-pub const START:    u8 = 0x01;
+pub const START: u8 = 0x01;
 /// Indicates end of frame
-pub const END:      u8 = 0x17;
+pub const END: u8 = 0x17;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum FrameState {
     Start,
     PayloadLen,
     Payload,
-    End
+    End,
 }
 
 impl fmt::Display for FrameState {
@@ -28,7 +28,7 @@ impl fmt::Display for FrameState {
             FrameState::Start => "Start".fmt(f),
             FrameState::PayloadLen => "PayloadLen".fmt(f),
             FrameState::Payload => "Payload".fmt(f),
-            FrameState::End => "End".fmt(f)
+            FrameState::End => "End".fmt(f),
         }
     }
 }
