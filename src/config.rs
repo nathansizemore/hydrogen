@@ -12,6 +12,8 @@ pub struct Config {
     pub addr: String,
     pub port: u16,
     pub workers: u8,
-    pub ssl: bool,
+    pub use_ssl: bool,
+    pub ssl_cert: &'static str,
+    pub ssl_key: &'static str,
     pub log_level: LogLevelFilter
 }

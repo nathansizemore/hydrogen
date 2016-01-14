@@ -13,6 +13,7 @@ use std::io::Error;
 pub mod frame;
 pub mod socket;
 pub mod nbstream;
+pub mod securestream;
 
 
 pub trait HRecv {

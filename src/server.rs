@@ -7,6 +7,7 @@
 
 
 use std::io::Error;
+use std::path::Path;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::{ptr, mem, thread};
@@ -20,12 +21,16 @@ use epoll::util::*;
 use epoll::EpollEvent;
 use stream::socket::Socket;
 use stream::nbstream::Nbstream;
+use stream::securestream::SecureStream;
 use stream::{Stream, HRecv, HSend, CloneHStream};
 use stats;
 use types::*;
 use resources::ResourcePool;
 use libc::{c_ushort, c_ulong, c_uint, c_int, c_void};
 use config::Config;
+
+use openssl::ssl::{SslContext, SslMethod, SSL_VERIFY_NONE};
+use openssl::x509::X509FileType;
 
 
 extern "C" {
@@ -37,11 +42,15 @@ extern "C" {
 // We need to be able to access our resource pool from several methods
 static mut pool: *mut ResourcePool = 0 as *mut ResourcePool;
 
+// GLobal SslContext
+static mut ssl_context: *mut SslContext = 0 as *mut SslContext;
+
 // When added to epoll, these will be the conditions of kernel notification:
 //
 // EPOLLET  - Fd is in EdgeTriggered mode (notification on state changes)
 // EPOLLIN  - Data is available in kerndl buffer
 const EVENTS: u32 = event_type::EPOLLET | event_type::EPOLLIN;
+
 
 /// Starts the epoll wait and incoming connection listener threads.
 pub fn begin(config: Config, handler: Box<EventHandler>) {
@@ -129,6 +138,27 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             return;
         }
 
+        // If we're using SSL, get a context ready
+        if config.use_ssl {
+            let ctx_result = SslContext::new(SslMethod::Sslv23);
+            if ctx_result.is_err() {
+                println!("Error creating context: {}", ctx_result.unwrap_err());
+                return;
+            }
+            let mut context = ctx_result.unwrap();
+
+            context.set_cipher_list("DEFAULT").unwrap();
+            context.set_certificate_file(
+                &Path::new(config.ssl_cert),
+                X509FileType::PEM).unwrap();
+            context.set_private_key_file(
+                &Path::new(config.ssl_key),
+                X509FileType::PEM).unwrap();
+            context.set_verify(SSL_VERIFY_NONE, None);
+
+            ssl_context = &mut context;
+        }
+
         loop {
             // Accept new client
             let result = libc::accept(server_fd,
@@ -137,24 +167,46 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                 error!("Accepting new connection: {}", Error::from_raw_os_error(result as i32));
             }
 
-            // Create new stream
-            let _ = Nbstream::new(Socket {
-                fd: result
-            }).map(|nbstream| {
-                let stream = Stream {
-                    inner: Box::new(nbstream)
-                };
-                let fd = stream.as_raw_fd();
-                add_stream_to_master_list(stream, streams.clone());
-                add_to_epoll(epfd, fd, streams.clone());
-                stats::conn_recv();
-            }).map_err(|e| {
-                // If we ever fail here, it is safe to assume everything else has gone to
-                // shit. No way to clean it up, so we'll just leave. The main process thread has
-                // joined to this tread, so panic-ing will cause our parent process to end nicely.
-                error!("Creating stream: {}", e);
-                panic!()
-            });
+            // Create new stream and add to server
+            if config.use_ssl {
+                let _ = SecureStream::new(&(*ssl_context), Socket {
+                    fd: result
+                }).map(|securestream| {
+                    let stream = Stream {
+                        inner: Box::new(securestream)
+                    };
+                    let fd = stream.as_raw_fd();
+                    add_stream_to_master_list(stream, streams.clone());
+                    add_to_epoll(epfd, fd, streams.clone());
+                    stats::conn_recv();
+                }).map_err(|e| {
+                    // If we ever fail here, it is safe to assume everything else has gone to
+                    // shit. No way to clean it up, so we'll just leave. The main process thread
+                    // is joined to this tread, so panic-ing will cause our parent process
+                    // to close out completely.
+                    error!("Creating stream: {}", e);
+                    panic!()
+                });
+            } else {
+                let _ = Nbstream::new(Socket {
+                    fd: result
+                }).map(|nbstream| {
+                    let stream = Stream {
+                        inner: Box::new(nbstream)
+                    };
+                    let fd = stream.as_raw_fd();
+                    add_stream_to_master_list(stream, streams.clone());
+                    add_to_epoll(epfd, fd, streams.clone());
+                    stats::conn_recv();
+                }).map_err(|e| {
+                    // If we ever fail here, it is safe to assume everything else has gone to
+                    // shit. No way to clean it up, so we'll just leave. The main process thread
+                    // is joined to this tread, so panic-ing will cause our parent process
+                    // to close out completely.
+                    error!("Creating stream: {}", e);
+                    panic!()
+                });
+            }
         }
     }
 }
