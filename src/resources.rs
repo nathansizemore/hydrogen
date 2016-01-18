@@ -23,9 +23,9 @@ pub struct ResourcePool {
 impl ResourcePool {
     /// Creates a new pool of worker threads
     pub fn new(num_workers: u8) -> ResourcePool {
+        let mut num_workers = num_workers;
         if num_workers < 1 {
             warn!("Must at least have one worker thread. Creating 1");
-            let mut num_workers = num_workers;
             num_workers = 1;
         }
 
