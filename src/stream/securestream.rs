@@ -84,6 +84,10 @@ impl<T: Read + Write + AsRawFd> HRecv for SecureStream<T> {
 
             trace!("read: {}bytes", num_read);
 
+            if num_read == 0 {
+                return Err(Error::new(ErrorKind::Other, "EOF"));
+            }
+
             buf = self.buf_with_scratch(&buf[..], num_read);
             let len = buf.len();
             let mut seek_pos = 0usize;

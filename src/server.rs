@@ -155,25 +155,6 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             }
         };
 
-
-        // if config.use_ssl {
-        //     let ctx_result = SslContext::new(SslMethod::Sslv23);
-        //     if ctx_result.is_err() {
-        //         println!("Error creating context: {}", ctx_result.unwrap_err());
-        //         return;
-        //     }
-        //     let mut context = ctx_result.unwrap();
-        //
-        //     context.set_cipher_list("DEFAULT").unwrap();
-        //     context.set_certificate_file(&Path::new(config.ssl_cert), X509FileType::PEM)
-        //            .unwrap();
-        //     context.set_private_key_file(&Path::new(config.ssl_key), X509FileType::PEM)
-        //            .unwrap();
-        //     context.set_verify(SSL_VERIFY_NONE, None);
-        //
-        //     ssl_context = &mut context;
-        // }
-
         loop {
             // Accept new client
             let result = libc::accept(server_fd,
