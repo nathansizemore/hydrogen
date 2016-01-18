@@ -7,7 +7,6 @@
 
 
 use types::*;
-use num_cpus;
 use workerthread::WorkerThread;
 
 
