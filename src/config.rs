@@ -5,6 +5,8 @@
 // distributed with this file, You can obtain one at
 // http://mozilla.org/MPL/2.0/.
 
+
+use openssl::ssl::SslContext;
 use log::LogLevelFilter;
 
 #[derive(Clone)]
@@ -12,8 +14,6 @@ pub struct Config {
     pub addr: String,
     pub port: u16,
     pub workers: u8,
-    pub use_ssl: bool,
-    pub ssl_cert: &'static str,
-    pub ssl_key: &'static str,
+    pub ssl: Option<SslContext>,
     pub log_level: LogLevelFilter,
 }

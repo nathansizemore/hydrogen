@@ -42,7 +42,7 @@ extern "C" {
 // We need to be able to access our resource pool from several methods
 static mut pool: *mut ResourcePool = 0 as *mut ResourcePool;
 
-// GLobal SslContext
+// Global SslContext
 static mut ssl_context: *mut SslContext = 0 as *mut SslContext;
 
 // When added to epoll, these will be the conditions of kernel notification:
@@ -144,24 +144,36 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             return;
         }
 
-        // If we're using SSL, get a context ready
-        if config.use_ssl {
-            let ctx_result = SslContext::new(SslMethod::Sslv23);
-            if ctx_result.is_err() {
-                println!("Error creating context: {}", ctx_result.unwrap_err());
-                return;
+        // If we're using SSL, setup our context
+        let using_ssl;
+        match config.ssl {
+            Some(context) => {
+                ssl_context = &mut context;
+                using_ssl = true;
             }
-            let mut context = ctx_result.unwrap();
+            None => {
+                using_ssl = false;
+            }
+        };
 
-            context.set_cipher_list("DEFAULT").unwrap();
-            context.set_certificate_file(&Path::new(config.ssl_cert), X509FileType::PEM)
-                   .unwrap();
-            context.set_private_key_file(&Path::new(config.ssl_key), X509FileType::PEM)
-                   .unwrap();
-            context.set_verify(SSL_VERIFY_NONE, None);
 
-            ssl_context = &mut context;
-        }
+        // if config.use_ssl {
+        //     let ctx_result = SslContext::new(SslMethod::Sslv23);
+        //     if ctx_result.is_err() {
+        //         println!("Error creating context: {}", ctx_result.unwrap_err());
+        //         return;
+        //     }
+        //     let mut context = ctx_result.unwrap();
+        //
+        //     context.set_cipher_list("DEFAULT").unwrap();
+        //     context.set_certificate_file(&Path::new(config.ssl_cert), X509FileType::PEM)
+        //            .unwrap();
+        //     context.set_private_key_file(&Path::new(config.ssl_key), X509FileType::PEM)
+        //            .unwrap();
+        //     context.set_verify(SSL_VERIFY_NONE, None);
+        //
+        //     ssl_context = &mut context;
+        // }
 
         loop {
             // Accept new client
@@ -174,7 +186,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             }
 
             // Create new stream and add to server
-            if config.use_ssl {
+            if using_ssl {
                 let _ = SecureStream::new(&(*ssl_context), Socket {
                     fd: result
                 }).map(|securestream| {
