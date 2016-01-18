@@ -7,7 +7,6 @@
 
 
 use std::io::Error;
-use std::path::Path;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::{ptr, mem, thread};
@@ -29,8 +28,7 @@ use resources::ResourcePool;
 use libc::{c_ushort, c_ulong, c_uint, c_int, c_void};
 use config::Config;
 
-use openssl::ssl::{SslContext, SslMethod, SSL_VERIFY_NONE};
-use openssl::x509::X509FileType;
+use openssl::ssl::SslContext;
 
 
 extern "C" {
