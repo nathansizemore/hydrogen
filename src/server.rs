@@ -146,6 +146,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
 
         // If we're using SSL, setup our context
         let using_ssl;
+        let mut config = config;
         match config.ssl.as_mut() {
             Some(context) => {
                 ssl_context = context;
