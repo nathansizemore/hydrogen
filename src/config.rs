@@ -9,7 +9,7 @@
 use openssl::ssl::SslContext;
 use log::LogLevelFilter;
 
-#[derive(Clone)]
+
 pub struct Config {
     pub addr: String,
     pub port: u16,
