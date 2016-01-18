@@ -22,21 +22,10 @@ pub struct ResourcePool {
 
 impl ResourcePool {
     /// Creates a new pool of worker threads
-    pub fn new() -> ResourcePool {
-        // At this time, the following threads have been accounted for:
-        // 1.) System resources/applications
-        // 2.) Incoming connections
-        // 3.) Epoll wait event loop
-        // 4.) Epoll event handler
-        //
-        // So, in theory, we should be allocating enough workers for num cpus - 4
-        // But, this might be in a dev environment where keeping one thread per core
-        // is not such a huge rule. We'll just assume the user knows that they will only
-        // get 1 worker thread for anything less than 5 cores reported by the system.
-        let cpus = num_cpus::get();
-        let mut num_workers: i8 = (cpus as i8) - 4;
+    pub fn new(num_workers: u8) -> ResourcePool {
         if num_workers < 1 {
-            warn!("Yo - asumming a dev env. Only 1 worker thread will be used");
+            warn!("Must at least have one worker thread. Creating 1");
+            let mut num_workers = num_workers;
             num_workers = 1;
         }
 

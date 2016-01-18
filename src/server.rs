@@ -58,7 +58,7 @@ pub fn begin(config: Config, handler: Box<EventHandler>) {
     let sockets = Arc::new(Mutex::new(LinkedList::<Stream>::new()));
 
     // Resource pool
-    let mut rp = ResourcePool::new();
+    let mut rp = ResourcePool::new(config.workers);
     unsafe {
         pool = &mut rp;
     }
