@@ -164,6 +164,12 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                        Error::from_raw_os_error(result as i32));
             }
 
+            // Setup new socket
+            let socket = Socket {
+                fd: result
+            };
+            socket.set_tcp_keepalive(true);
+
             // Create new stream and add to server
             if using_ssl {
                 let _ = SecureStream::new(&(*ssl_context), Socket {

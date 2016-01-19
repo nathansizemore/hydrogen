@@ -19,6 +19,26 @@ pub struct Socket {
     pub fd: c_int,
 }
 
+impl Socket {
+
+    pub fn set_tcp_keepalive(keepalive: bool) {
+        let optval: c_int = match keepalive {
+            true => 1,
+            false => 0
+        };
+        let opt_result = libc::setsockopt(server_fd,
+                                          libc::SOL_SOCKET,
+                                          libc::SO_KEEPALIVE,
+                                          &optval as *const _ as *const c_void,
+                                          mem::size_of::<c_int>() as u32);
+        if opt_result < 0 {
+            error!("Setting SO_REUSEADDR: {}",
+                   Error::from_raw_os_error(errno().0 as i32));
+            return;
+        }
+    }
+}
+
 impl Read for Socket {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         if buf.len() < 1 {
