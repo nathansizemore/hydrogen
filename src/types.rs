@@ -26,7 +26,7 @@ pub trait EventHandler {
 type StreamList = Arc<Mutex<LinkedList<Stream>>>;
 
 /// Used as a strongly typed wrapper for passing around `EventHandler`
-struct Handler(pub *mut EventHandler);
+pub struct Handler(pub *mut EventHandler);
 unsafe impl Send for Handler {}
 unsafe impl Sync for Handler {}
 impl Clone for Handler {
@@ -40,7 +40,7 @@ impl Clone for Handler {
 }
 
 /// Used as a strongly typed wrapper for passing around `EventHandler` functions
-struct Event(pub *mut Fn());
+pub struct Event(pub *mut Fn());
 unsafe impl Send for Event {}
 unsafe impl Sync for Event {}
 impl Clone for Event {
