@@ -20,15 +20,16 @@ extern crate rustc_serialize;
 
 
 use std::sync::Mutex;
+use types::*;
 use config::Config;
 
-pub use stream::{Stream, HSend};
-pub use types::EventHandler;
+pub use stream::frame;
+pub use stream::Stream;
 
 pub mod stream;
 pub mod config;
+pub mod types;
 
-mod types;
 mod stats;
 mod server;
 mod resources;
@@ -40,9 +41,14 @@ mod workerthread;
 pub fn begin<T>(config: Config, handler: Box<T>)
     where T: EventHandler + Send + Sync + 'static
 {
+
     initialize_logger();
+
+    // Data collection
     let mut data = Mutex::new(stats::Stats::new());
     stats::init(&mut data);
+
+    // Begin server
     server::begin(config, handler);
 }
 

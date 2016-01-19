@@ -9,9 +9,5 @@
 extern crate gcc;
 
 fn main() {
-    if cfg!(target_os = "linux") {
-        gcc::compile_library("libshim.a", &["shim.c"]);
-    } else {
-        gcc::compile_library("libshim.a", &["shim-osx.c"]);
-    }
+    gcc::compile_library("libshim.a", &["shim.c"]);
 }
