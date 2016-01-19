@@ -15,7 +15,7 @@ use stream::Stream;
 /// The `EventHandler` trait allows for hydrogen event dispatching.
 ///
 /// Hydrogen uses multiple threads to dispatch events. Implementors should
-/// take care to ensure any shared state within `self` is properly safeguarded
+/// take care to ensure any state within `self` is properly safeguarded
 /// against race conditions that may occur.
 pub trait EventHandler {
     fn on_data_received(&mut self, stream: Stream, buffer: Vec<u8>);
@@ -23,11 +23,10 @@ pub trait EventHandler {
 }
 
 /// Internal list of all currently connected streams
-pub type StreamList = Arc<Mutex<LinkedList<Stream>>>;
+type StreamList = Arc<Mutex<LinkedList<Stream>>>;
 
 /// Used as a strongly typed wrapper for passing around `EventHandler`
-pub struct Handler(pub *mut EventHandler);
-
+struct Handler(pub *mut EventHandler);
 unsafe impl Send for Handler {}
 unsafe impl Sync for Handler {}
 impl Clone for Handler {
@@ -41,8 +40,7 @@ impl Clone for Handler {
 }
 
 /// Used as a strongly typed wrapper for passing around `EventHandler` functions
-pub struct Event(pub *mut Fn());
-
+struct Event(pub *mut Fn());
 unsafe impl Send for Event {}
 unsafe impl Sync for Event {}
 impl Clone for Event {

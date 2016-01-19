@@ -12,58 +12,41 @@ extern crate fern;
 extern crate time;
 extern crate libc;
 extern crate rand;
-#[cfg(target_os = "linux")]
 extern crate epoll;
 extern crate errno;
-#[cfg(target_os = "linux")]
 extern crate openssl;
-extern crate num_cpus;
 extern crate rustc_serialize;
 
 
-#[cfg(target_os = "linux")]
 use std::sync::Mutex;
-#[cfg(target_os = "linux")]
 use types::*;
-#[cfg(target_os = "linux")]
 use config::Config;
 
-pub use stream::frame;
-pub use stream::Stream;
+pub use stream::{Stream, HSend};
+pub use types::{EventHandler
 
 pub mod stream;
 pub mod config;
-pub mod types;
 
-
+mod types;
 mod stats;
-#[cfg(target_os = "linux")]
 mod server;
-#[cfg(target_os = "linux")]
 mod resources;
-#[cfg(target_os = "linux")]
 mod workerthread;
 
 
 /// Starts the server binding to the passed address.
 /// This is a blocking call for the life of the server.
-#[cfg(target_os = "linux")]
 pub fn begin<T>(config: Config, handler: Box<T>)
     where T: EventHandler + Send + Sync + 'static
 {
-
     initialize_logger();
-
-    // Data collection
     let mut data = Mutex::new(stats::Stats::new());
     stats::init(&mut data);
-
-    // Begin server
     server::begin(config, handler);
 }
 
 /// Initializes the global logger
-#[cfg(target_os = "linux")]
 fn initialize_logger() {
     let _ = fern::init_global_logger(fern::DispatchConfig {
                                          format: Box::new(|msg: &str,
@@ -82,6 +65,4 @@ fn initialize_logger() {
                                          level: log::LogLevelFilter::Trace,
                                      },
                                      log::LogLevelFilter::Trace);
-
-    info!("Logger initialized. \nLog file: /var/log/hydrogen.log");
 }
