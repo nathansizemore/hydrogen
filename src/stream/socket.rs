@@ -6,6 +6,7 @@
 // http://mozilla.org/MPL/2.0/.
 
 
+use std::mem;
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::io::{Read, Write, Error, ErrorKind};
 
