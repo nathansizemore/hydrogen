@@ -23,7 +23,7 @@ use types::*;
 use config::Config;
 
 pub use stream::{Stream, HSend};
-pub use types::{EventHandler
+pub use types::EventHandler;
 
 pub mod stream;
 pub mod config;
