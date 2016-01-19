@@ -23,7 +23,7 @@ pub trait EventHandler {
 }
 
 /// Internal list of all currently connected streams
-type StreamList = Arc<Mutex<LinkedList<Stream>>>;
+pub type StreamList = Arc<Mutex<LinkedList<Stream>>>;
 
 /// Used as a strongly typed wrapper for passing around `EventHandler`
 pub struct Handler(pub *mut EventHandler);
