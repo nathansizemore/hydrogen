@@ -39,6 +39,8 @@ impl Socket {
     }
 
     pub fn set_tcp_nodelay(&self, nodelay: bool) {
+        const SOL_TCP: c_int = 6;
+        
         let optval: c_int = match nodelay {
             true => 1,
             false => 0
