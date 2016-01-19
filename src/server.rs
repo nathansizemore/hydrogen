@@ -27,7 +27,6 @@ use types::*;
 use resources::ResourcePool;
 use libc::{c_ushort, c_ulong, c_uint, c_int, c_void};
 use config::Config;
-
 use openssl::ssl::SslContext;
 
 

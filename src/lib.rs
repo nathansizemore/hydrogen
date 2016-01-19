@@ -15,6 +15,7 @@ extern crate rand;
 #[cfg(target_os = "linux")]
 extern crate epoll;
 extern crate errno;
+#[cfg(target_os = "linux")]
 extern crate openssl;
 extern crate num_cpus;
 extern crate rustc_serialize;
