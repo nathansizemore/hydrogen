@@ -22,7 +22,7 @@ pub struct Socket {
 
 impl Socket {
 
-    unsafe pub fn set_tcp_keepalive(&self, keepalive: bool) {
+    pub unsafe fn set_tcp_keepalive(&self, keepalive: bool) {
         let optval: c_int = match keepalive {
             true => 1,
             false => 0
@@ -38,7 +38,7 @@ impl Socket {
         }
     }
 
-    unsafe pub fn set_tcp_nodelay(&self, nodelay: bool) {
+    pub unsafe fn set_tcp_nodelay(&self, nodelay: bool) {
         const SOL_TCP: c_int = 6;
 
         let optval: c_int = match nodelay {
