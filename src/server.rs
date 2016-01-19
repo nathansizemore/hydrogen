@@ -173,9 +173,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
 
             // Create new stream and add to server
             if using_ssl {
-                let _ = SecureStream::new(&(*ssl_context), Socket {
-                    fd: result
-                }).map(|securestream| {
+                let _ = SecureStream::new(&(*ssl_context), socket).map(|securestream| {
                     let stream = Stream {
                         inner: Box::new(securestream)
                     };
@@ -192,9 +190,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                     panic!()
                 });
             } else {
-                let _ = Nbstream::new(Socket {
-                    fd: result
-                }).map(|nbstream| {
+                let _ = Nbstream::new(socket).map(|nbstream| {
                     let stream = Stream {
                         inner: Box::new(nbstream)
                     };
