@@ -40,13 +40,13 @@ impl Socket {
 
     pub fn set_tcp_nodelay(&self, nodelay: bool) {
         const SOL_TCP: c_int = 6;
-        
+
         let optval: c_int = match nodelay {
             true => 1,
             false => 0
         };
         let opt_result = libc::setsockopt(self.fd,
-                                          libc::SOL_TCP,
+                                          SOL_TCP,
                                           libc::SO_KEEPALIVE,
                                           &optval as *const _ as *const c_void,
                                           mem::size_of::<c_int>() as u32);
