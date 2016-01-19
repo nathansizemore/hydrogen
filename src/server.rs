@@ -169,6 +169,7 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                 fd: result
             };
             socket.set_tcp_keepalive(true);
+            socket.set_tcp_nodelay(true);
 
             // Create new stream and add to server
             if using_ssl {
