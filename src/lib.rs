@@ -19,7 +19,6 @@ extern crate rustc_serialize;
 
 
 use std::sync::Mutex;
-use types::*;
 use config::Config;
 
 pub use stream::{Stream, HSend};
