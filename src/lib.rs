@@ -8,7 +8,6 @@
 
 #[macro_use]
 extern crate log;
-extern crate fern;
 extern crate time;
 extern crate libc;
 extern crate rand;
@@ -41,34 +40,7 @@ mod workerthread;
 pub fn begin<T>(config: Config, handler: Box<T>)
     where T: EventHandler + Send + Sync + 'static
 {
-
-    initialize_logger();
-
-    // Data collection
     let mut data = Mutex::new(stats::Stats::new());
     stats::init(&mut data);
-
-    // Begin server
     server::begin(config, handler);
-}
-
-/// Initializes the global logger
-fn initialize_logger() {
-    let _ = fern::init_global_logger(fern::DispatchConfig {
-                                         format: Box::new(|msg: &str,
-                                                           level: &log::LogLevel,
-                                                           _location: &log::LogLocation| {
-                                             format!("[{}][{}] {}",
-                                                     time::now()
-                                                         .strftime("%Y-%m-%d][%H:%M:%S")
-                                                         .unwrap(),
-                                                     level,
-                                                     msg)
-                                         }),
-                                         output: vec![fern::OutputConfig::stdout(),
-                                                      fern::OutputConfig::file("/var/log/hydrogen\
-                                                                                .log")],
-                                         level: log::LogLevelFilter::Trace,
-                                     },
-                                     log::LogLevelFilter::Trace);
 }
