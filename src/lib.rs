@@ -22,6 +22,7 @@ use std::sync::Mutex;
 use types::*;
 use config::Config;
 
+pub use stream::frame;
 pub use stream::Stream;
 
 pub mod stream;
