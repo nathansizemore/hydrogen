@@ -10,15 +10,16 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use std::io::{Read, Write, Error, ErrorKind};
 
 use libc;
-use frame;
 use errno::errno;
 use openssl::ssl::{SslContext, SslStream};
 use openssl::ssl::error::Error as SslStreamError;
 
 use stream::{HRecv, HSend, HStream};
-use frame::FrameState;
+use super::frame;
+use super::frame::FrameState;
 
 use super::super::stats;
+
 
 #[derive(Clone)]
 pub struct SecureStream<T: Read + Write + AsRawFd> {

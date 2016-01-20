@@ -10,11 +10,11 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use std::io::{Read, Write, Error, ErrorKind};
 
 use libc;
-use frame;
+use super::frame;
 use errno::errno;
 
 use stream::{HRecv, HSend, HStream};
-use frame::FrameState;
+use super::frame::FrameState;
 
 use super::super::stats;
 

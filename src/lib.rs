@@ -22,7 +22,6 @@ use std::sync::Mutex;
 use types::*;
 use config::Config;
 
-pub use stream::frame;
 pub use stream::Stream;
 
 pub mod stream;
@@ -35,7 +34,7 @@ mod resources;
 mod workerthread;
 
 
-/// Starts the server binding to the passed address.
+/// Starts the server using the passed `config` options.
 /// This is a blocking call for the life of the server.
 pub fn begin<T>(config: Config, handler: Box<T>)
     where T: EventHandler + Send + Sync + 'static
