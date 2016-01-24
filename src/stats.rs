@@ -41,6 +41,7 @@
 use std::str;
 use std::str::FromStr;
 use std::thread;
+use std::time::Duration;
 use std::ops::{Deref, DerefMut};
 use std::sync::Mutex;
 use std::process::Command;
@@ -378,14 +379,15 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
                        .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
     // Sleep for sec
-    thread::sleep_ms((sec * 1000.0f32) as u32);
+    let wait_time = Duration::from_millis((sec * 1000f32) as u64);
+    thread::sleep(wait_time);
     let output_2 = Command::new("cat")
                        .arg("/proc/stat")
                        .output()
                        .unwrap_or_else(|e| panic!("failed to execute process: {}", e));
 
     // Sleep for sec
-    thread::sleep_ms((sec * 1000.0f32) as u32);
+    thread::sleep(wait_time);
     let output_3 = Command::new("cat")
                        .arg("/proc/stat")
                        .output()
