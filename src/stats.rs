@@ -405,9 +405,10 @@ fn cpu_usage_for_secs(sec: f32) -> Result<(f32, Vec<CpuData>), ()> {
             overall = usage;
         } else {
             // Core x
-            let mut core = CpuData::new(x);
-            core.set_usage(usage);
-            cores.push(core);
+            cores.push(CpuData {
+                core: x,
+                using: usage
+            });
         }
         x += 1;
     }
