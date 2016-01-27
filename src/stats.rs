@@ -84,7 +84,7 @@ impl Stats {
                     bytes_used: 0,
                     bytes_available: 0
                 },
-                cpu_overall: 0,
+                cpu_overall: 0f32,
                 cpu_per_core: Vec::<CpuData>::new()
             }
         }
@@ -139,7 +139,7 @@ pub fn conn_recv() {
     };
 
     let d = guard.deref_mut();
-    d.num_clients += 1;
+    d.num_connections += 1;
 }
 
 /// Decrements num_clients
@@ -153,11 +153,11 @@ pub fn conn_lost() {
     };
 
     let d = guard.deref_mut();
-    if d.num_clients == 0 {
+    if d.num_connections == 0 {
         warn!("Attempting to decrement clients into negative space.");
         return;
     }
-    d.num_clients -= 1;
+    d.num_connections -= 1;
 }
 
 /// Called when a new fd is returned via `listen()`
