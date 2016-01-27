@@ -176,7 +176,7 @@ pub fn fd_opened() {
 
 /// Called when a new fd is closed via `close()`
 #[inline]
-pub fn fd_opened() {
+pub fn fd_closed() {
     let mut guard = unsafe {
         match (*data).lock() {
             Ok(g) => g,
