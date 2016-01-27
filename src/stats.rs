@@ -110,11 +110,11 @@ pub struct RamData {
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
-pub struct CpuData
+pub struct CpuData {
     /// Core id
     pub core: u8,
     /// Amount being used
-    pub using: f32,
+    pub using: f32
 }
 
 /// Initializes the module and sets default state
