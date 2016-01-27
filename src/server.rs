@@ -332,7 +332,6 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
                 }
 
                 // TODO - Refactor once better function passing traits are available in stable.
-                let buf_len = payload.len();
                 let handler_cpy = handler.clone();
                 let stream_cpy = Stream { inner: stream.inner.clone_h_stream() };
                 let payload_cpy = payload.clone();
@@ -451,7 +450,7 @@ fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
         split.pop_front();
         list.append(&mut split);
     }
-    
+
     stats::conn_lost();
 }
 
