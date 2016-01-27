@@ -73,7 +73,7 @@ pub struct Stats {
 
 impl Stats {
     /// Creates a new `Stats` structure
-    pub fn new() -> {
+    pub fn new() -> Stats {
         Stats {
             up_time: 0,
             num_connections: 0,
