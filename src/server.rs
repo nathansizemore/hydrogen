@@ -162,7 +162,10 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
             if result < 0 {
                 error!("Accepting new connection: {}",
                        Error::from_raw_os_error(result as i32));
+                continue;
             }
+
+            stats::fd_opened();
 
             // Setup new socket
             let socket = Socket {
@@ -464,4 +467,5 @@ fn close_fd(fd: RawFd) {
             return;
         }
     }
+    stats::fd_closed();
 }

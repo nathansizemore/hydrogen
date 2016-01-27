@@ -63,7 +63,7 @@ pub struct Stats {
     pub up_time: u64,
     /// Current number of connections
     pub num_connections: u32,
-    /// Total fds accepted through `listen()`
+    /// Total fds accepted through `accept()`
     pub fds_opened: u64,
     /// Total fds closed through 'close()'
     pub fds_closed: u64,
@@ -128,7 +128,7 @@ pub fn init(data_ref: &mut Mutex<Stats>) {
     info!("data module initialized");
 }
 
-/// Increments num_clients
+/// Called when a connection is added to the master list
 #[inline]
 pub fn conn_recv() {
     let mut guard = unsafe {
@@ -142,7 +142,7 @@ pub fn conn_recv() {
     d.num_connections += 1;
 }
 
-/// Decrements num_clients
+/// Called when a connection is removed from master list
 #[inline]
 pub fn conn_lost() {
     let mut guard = unsafe {
@@ -160,7 +160,7 @@ pub fn conn_lost() {
     d.num_connections -= 1;
 }
 
-/// Called when a new fd is returned via `listen()`
+/// Called when a new fd is returned via `accept()`
 #[inline]
 pub fn fd_opened() {
     let mut guard = unsafe {
