@@ -11,11 +11,7 @@
 //! JSON is returned with information
 //! {
 //!     "up_time": 123456, // Seconds
-//!     "bytes_recv": 123456,
-//!     "bytes_sent": 123456,
-//!     "msg_recv": 1234,
-//!     "msg_sent": 1234,
-//!     "num_clients": 1234,
+//!     "num_connections": 1234,
 //!     "resources": {
 //!         "ram": {
 //!             "bytes_used": 1234,
@@ -36,7 +32,6 @@
 //! }
 //!
 
-#![allow(dead_code)]
 
 use std::str;
 use std::str::FromStr;
@@ -65,19 +60,35 @@ static mut start_time: f64 = 0 as f64;
 #[derive(RustcDecodable, RustcEncodable, Clone)]
 pub struct Stats {
     /// Total time since server was started
-    up_time: u64,
-    /// Total bytes received
-    bytes_recv: u64,
-    /// Total bytes sent
-    bytes_sent: u64,
-    /// Total messages received
-    msg_recv: u64,
-    /// Total messages sent
-    msg_sent: u64,
-    /// Current number of connected clients
-    num_clients: u32,
+    pub up_time: u64,
+    /// Current number of connections
+    pub num_connections: u32,
+    /// Total fds accepted through `listen()`
+    pub fds_opened: u64,
+    /// Total fds closed through 'close()'
+    pub fds_closed: u64,
     /// Resource usage (ram/cpu)
-    resources: ResourceData,
+    pub resources: ResourceData,
+}
+
+impl Stats {
+    /// Creates a new `Stats` structure
+    pub fn new() -> {
+        Stats {
+            up_time: 0,
+            num_connections: 0,
+            fds_opened: 0,
+            fds_closed: 0,
+            resources: ResourceData {
+                ram: RamData {
+                    bytes_used: 0,
+                    bytes_available: 0
+                },
+                cpu_overall: 0,
+                cpu_per_core: Vec::<CpuData>::new()
+            }
+        }
+    }
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
@@ -99,96 +110,12 @@ pub struct RamData {
 }
 
 #[derive(RustcDecodable, RustcEncodable, Clone)]
-pub struct CpuData {
+pub struct CpuData
     /// Core id
-    core: u8,
+    pub core: u8,
     /// Amount being used
-    using: f32,
+    pub using: f32,
 }
-
-
-impl Stats {
-    /// Returns a new Stats
-    pub fn new() -> Stats {
-        Stats {
-            up_time: 0u64,
-            bytes_recv: 0u64,
-            bytes_sent: 0u64,
-            msg_recv: 0u64,
-            msg_sent: 0u64,
-            num_clients: 0u32,
-            resources: ResourceData::new(),
-        }
-    }
-
-    /// Increments num_clients
-    pub fn conn_recv(&mut self) {
-        self.num_clients += 1;
-    }
-
-    /// Decrements num_clients
-    pub fn conn_lost(&mut self) {
-        if self.num_clients == 0 {
-            warn!("Attempting to decrement clients into negative space.");
-            return;
-        }
-        self.num_clients -= 1;
-    }
-
-    /// Sets new resource data
-    pub fn set_resource_data(&mut self, new_data: ResourceData) {
-        self.resources = new_data;
-    }
-}
-
-impl ResourceData {
-    /// Returns a new ResourceData
-    pub fn new() -> ResourceData {
-        let mut temp = ResourceData {
-            ram: RamData::new(),
-            cpu_overall: 0.0f32,
-            cpu_per_core: Vec::new(),
-        };
-
-        let num = num_cpus::get();
-        temp.set_num_cpus(num);
-        temp
-    }
-
-    /// Sets the number of cpus
-    pub fn set_num_cpus(&mut self, num: usize) {
-        self.cpu_per_core = Vec::<CpuData>::with_capacity(num as usize);
-        for x in 0..num {
-            self.cpu_per_core.push(CpuData::new(x));
-        }
-    }
-}
-
-impl RamData {
-    /// Returns a new RamData
-    pub fn new() -> RamData {
-        RamData {
-            bytes_used: 0u64,
-            bytes_available: 0u64,
-        }
-    }
-}
-
-impl CpuData {
-    /// Returns a new CpuData
-    pub fn new(id: usize) -> CpuData {
-        CpuData {
-            core: id as u8,
-            using: 0.0f32,
-        }
-    }
-
-    /// Sets the core usage
-    pub fn set_usage(&mut self, usage: f32) {
-        self.using = usage;
-    }
-}
-
 
 /// Initializes the module and sets default state
 /// data_ref should represent a Mutex<Stats> structure that
@@ -204,36 +131,28 @@ pub fn init(data_ref: &mut Mutex<Stats>) {
 /// Increments num_clients
 #[inline]
 pub fn conn_recv() {
-    let mut d_guard;
-    unsafe {
-        d_guard = match (*data).lock() {
-            Ok(guard) => guard,
-            Err(e) => {
-                error!("Retrieveing lock on Stats: {}", e);
-                e.into_inner()
-            }
-        };
-    }
+    let mut guard = unsafe {
+        match (*data).lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        }
+    };
 
-    let d = d_guard.deref_mut();
+    let d = guard.deref_mut();
     d.num_clients += 1;
 }
 
 /// Decrements num_clients
 #[inline]
 pub fn conn_lost() {
-    let mut d_guard;
-    unsafe {
-        d_guard = match (*data).lock() {
-            Ok(guard) => guard,
-            Err(e) => {
-                error!("Retrieveing lock on Stats: {}", e);
-                e.into_inner()
-            }
-        };
-    }
+    let mut guard = unsafe {
+        match (*data).lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        }
+    };
 
-    let d = d_guard.deref_mut();
+    let d = guard.deref_mut();
     if d.num_clients == 0 {
         warn!("Attempting to decrement clients into negative space.");
         return;
@@ -241,76 +160,36 @@ pub fn conn_lost() {
     d.num_clients -= 1;
 }
 
-/// Increments the total number of messages received
+/// Called when a new fd is returned via `listen()`
 #[inline]
-pub fn msg_recv() {
-    let mut d_guard;
-    unsafe {
-        d_guard = match (*data).lock() {
-            Ok(guard) => guard,
-            Err(e) => {
-                error!("Retrieveing lock on Stats: {}", e);
-                e.into_inner()
-            }
-        };
-    }
+pub fn fd_opened() {
+    let mut guard = unsafe {
+        match (*data).lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        }
+    };
 
-    let d = d_guard.deref_mut();
-    d.msg_recv += 1;
+    let d = guard.deref_mut();
+    d.fds_opened += 1;
 }
 
-/// Adds amount to the total number of bytes received
+/// Called when a new fd is closed via `close()`
 #[inline]
-pub fn bytes_recv(amount: usize) {
-    let mut d_guard;
-    unsafe {
-        d_guard = match (*data).lock() {
-            Ok(guard) => guard,
-            Err(e) => {
-                error!("Retrieveing lock on Stats: {}", e);
-                e.into_inner()
-            }
-        };
+pub fn fd_opened() {
+    let mut guard = unsafe {
+        match (*data).lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        }
+    };
+
+    let d = guard.deref_mut();
+    if d.fds_closed == 0 {
+        warn!("Attempting to decrement fds into negative space");
+        return;
     }
-
-    let d = d_guard.deref_mut();
-    d.bytes_recv += amount as u64;
-}
-
-/// Adds amount to the total number of bytes sent
-#[inline]
-pub fn bytes_sent(amount: usize) {
-    let mut d_guard;
-    unsafe {
-        d_guard = match (*data).lock() {
-            Ok(guard) => guard,
-            Err(e) => {
-                error!("Retrieveing lock on Stats: {}", e);
-                e.into_inner()
-            }
-        };
-    }
-
-    let d = d_guard.deref_mut();
-    d.bytes_sent += amount as u64;
-}
-
-/// Adds amount to the total number of messages sent
-#[inline]
-pub fn msg_sent() {
-    let mut d_guard;
-    unsafe {
-        d_guard = match (*data).lock() {
-            Ok(guard) => guard,
-            Err(e) => {
-                error!("Retrieveing lock on Stats: {}", e);
-                e.into_inner()
-            }
-        };
-    }
-
-    let d = d_guard.deref_mut();
-    d.msg_sent += 1;
+    d.fds_opened -= 1;
 }
 
 /// Returns the structure as a JSON serialized Vec<u8> with CPU data for perf_sec time

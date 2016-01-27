@@ -180,7 +180,6 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                     let fd = stream.as_raw_fd();
                     add_stream_to_master_list(stream, streams.clone());
                     add_to_epoll(epfd, fd, streams.clone());
-                    stats::conn_recv();
                 }).map_err(|e| {
                     // If we ever fail here, it is safe to assume everything else has gone to
                     // shit. No way to clean it up, so we'll just leave. The main process thread
@@ -197,7 +196,6 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                     let fd = stream.as_raw_fd();
                     add_stream_to_master_list(stream, streams.clone());
                     add_to_epoll(epfd, fd, streams.clone());
-                    stats::conn_recv();
                 }).map_err(|e| {
                     // If we ever fail here, it is safe to assume everything else has gone to
                     // shit. No way to clean it up, so we'll just leave. The main process thread
@@ -344,10 +342,6 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
                         (*ptr).on_data_received(stream_cpy.clone(), payload_cpy.clone());
                     });
                 }
-
-                // Collect some stats
-                stats::msg_recv();
-                stats::bytes_recv(buf_len);
             }
             Ok(())
         }
@@ -381,6 +375,7 @@ fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
     };
     let stream_list = guard.deref_mut();
     stream_list.push_back(stream);
+    stats::conn_recv();
 }
 
 /// Adds a new fd to the epoll instance
@@ -395,7 +390,6 @@ fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
 
     if result.is_ok() {
         trace!("New fd added to epoll");
-        stats::conn_recv();
     } else {
         let e = result.unwrap_err();
         error!("CtrlError during add: {}", e);
@@ -457,6 +451,8 @@ fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
         split.pop_front();
         list.append(&mut split);
     }
+    
+    stats::conn_lost();
 }
 
 /// Closes a fd with the kernel
@@ -469,5 +465,4 @@ fn close_fd(fd: RawFd) {
             return;
         }
     }
-    stats::conn_lost();
 }

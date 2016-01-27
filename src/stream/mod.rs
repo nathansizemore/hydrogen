@@ -24,7 +24,8 @@ pub trait HSend {
     fn send(&mut self, buf: &[u8]) -> Result<usize, Error>;
 }
 pub trait CloneHStream {
-    fn clone_h_stream(&self) -> Box<HStream>; }
+    fn clone_h_stream(&self) -> Box<HStream>;
+}
 pub trait HStream: HRecv + HSend + CloneHStream + AsRawFd {}
 
 
@@ -44,8 +45,7 @@ impl AsRawFd for Stream {
     }
 }
 
-impl<T> CloneHStream for T where T: 'static + Clone + HStream
-{
+impl<T> CloneHStream for T where T: 'static + Clone + HStream {
     fn clone_h_stream(&self) -> Box<HStream> {
         Box::new(self.clone())
     }
@@ -53,8 +53,6 @@ impl<T> CloneHStream for T where T: 'static + Clone + HStream
 
 unsafe impl Send for Stream {}
 unsafe impl Sync for Stream {}
-
-
 impl HRecv for Stream {
     fn recv(&mut self) -> Result<(), Error> {
         self.inner.recv()
