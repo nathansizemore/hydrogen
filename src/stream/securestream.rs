@@ -18,8 +18,6 @@ use stream::{HRecv, HSend, HStream};
 use super::frame;
 use super::frame::FrameState;
 
-use super::super::stats;
-
 
 #[derive(Clone)]
 pub struct SecureStream<T: Read + Write + AsRawFd> {
@@ -150,8 +148,6 @@ impl<T: Read + Write + AsRawFd> HSend for SecureStream<T> {
 
             let num_written = result.unwrap();
             trace!("wrote: {}bytes", num_written);
-            stats::msg_sent();
-            stats::bytes_sent(num_written);
             total_written += num_written;
             if num_written < b.len() {
                 trace!("wrote less than buf.len, adding remainder to tx_queue");
