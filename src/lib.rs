@@ -24,7 +24,7 @@ use types::*;
 use config::Config;
 
 pub use ss::Stream;
-pub use ss::{SRecv, CloneStream, StreamShutdown};
+pub use ss::{SSend, StreamShutdown};
 
 pub mod config;
 pub mod types;
