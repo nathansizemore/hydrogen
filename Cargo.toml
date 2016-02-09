@@ -21,6 +21,4 @@ time = "*"
 rustc-serialize = "*"
 errno = "*"
 openssl = "*"
-
-[dependencies.simple-stream]
-path = "../simple-stream"
+simple-stream = "*"
