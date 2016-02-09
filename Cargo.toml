@@ -7,14 +7,9 @@ repository = "https://github.com/nathansizemore/hydrogen"
 readme = "README.md"
 keywords = ["presence"]
 license = "MPL 2.0"
-links = "shim"
-build = "build.rs"
 
 [lib]
 name = "hydrogen"
-
-[build-dependencies]
-gcc = "*"
 
 [dependencies]
 epoll = "*"
@@ -26,3 +21,6 @@ time = "*"
 rustc-serialize = "*"
 errno = "*"
 openssl = "*"
+
+[dependencies.simple-stream]
+path = "../simple-stream"

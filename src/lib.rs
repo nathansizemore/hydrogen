@@ -16,16 +16,16 @@ extern crate errno;
 extern crate openssl;
 extern crate num_cpus;
 extern crate rustc_serialize;
+extern crate simple_stream as ss;
 
 
 use std::sync::Mutex;
 use types::*;
 use config::Config;
 
-pub use stream::frame;
-pub use stream::Stream;
+pub use ss::Stream;
+pub use ss::{SRecv, CloneStream, StreamShutdown};
 
-pub mod stream;
 pub mod config;
 pub mod types;
 

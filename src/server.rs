@@ -9,8 +9,9 @@
 use std::io::Error;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
-use std::{ptr, mem, thread};
-use std::os::unix::io::{RawFd, AsRawFd};
+use std::{mem, thread};
+use std::net::{TcpStream, TcpListener};
+use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 use std::collections::LinkedList;
 
 use libc;
@@ -18,23 +19,17 @@ use errno::errno;
 use epoll;
 use epoll::util::*;
 use epoll::EpollEvent;
-use stream::socket::Socket;
-use stream::nbstream::Nbstream;
-use stream::securestream::SecureStream;
-use stream::{Stream, HRecv, HSend, CloneHStream};
+use libc::{c_int, c_void};
+use config::Config;
+use openssl::ssl::{SslStream, SslContext};
+
 use stats;
 use types::*;
 use resources::ResourcePool;
-use libc::{c_ushort, c_ulong, c_uint, c_int, c_void};
-use config::Config;
-use openssl::ssl::SslContext;
+use ss::nonblocking::plain::Plain;
+use ss::nonblocking::secure::Secure;
+use ss::{Socket, Stream, SRecv, SSend, TcpOptions, SocketOptions};
 
-
-extern "C" {
-    fn shim_htons(hostshort: c_ushort) -> c_ushort;
-    fn shim_htonl(addr: c_uint) -> c_uint;
-    fn shim_inaddr_any() -> c_ulong;
-}
 
 // We need to be able to access our resource pool from several methods
 static mut pool: *mut ResourcePool = 0 as *mut ResourcePool;
@@ -99,19 +94,42 @@ pub fn begin(config: Config, handler: Box<EventHandler>) {
 
 /// Incoming connection listening thread
 fn listen(config: Config, epfd: RawFd, streams: StreamList) {
+    // Setup server and listening port
+    let listener_result = try_setup_tcp_listener(&config);
+    if listener_result.is_err() {
+        error!("Setting up server: {}", listener_result.unwrap_err());
+        return;
+    }
+
+    // If we're using SSL, setup our context reference
+    if config.ssl.is_some() {
+        setup_ssl_context(&config);
+    }
+
+    // Begin listening for new connections
+    let listener = listener_result.unwrap();
+    for accept_result in listener.incoming() {
+        match accept_result {
+            Ok(tcp_stream) => handle_new_connection(tcp_stream, &config, epfd, streams.clone()),
+            Err(e) => error!("Accepting connection: {}", e)
+        }
+    }
+
+    drop(listener);
+}
+
+fn try_setup_tcp_listener(config: &Config) -> Result<TcpListener, Error> {
+    let create_result = TcpListener::bind((&config.addr[..], config.port));
+    if create_result.is_err() {
+        return create_result;
+    }
+
+    let listener = create_result.unwrap();
+    let server_fd = listener.as_raw_fd();
+
+    // Set the SO_REUSEADDR so that restarts after crashes do not take 5min to unbind
+    // the initial port
     unsafe {
-        let server_addr = libc::sockaddr_in {
-            sin_family: libc::AF_INET as u16,
-            sin_port: shim_htons(config.port),
-            sin_addr: libc::in_addr { s_addr: shim_htonl(shim_inaddr_any() as u32) },
-            sin_zero: [0u8; 8],
-        };
-
-        // Create a server socket with the passed info for TCP/IP
-        let server_fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
-
-        // Set the SO_REUSEADDR so that restarts after crashes do not take 5min to unbind
-        // the initial port
         let optval: c_int = 1;
         let opt_result = libc::setsockopt(server_fd,
                                           libc::SOL_SOCKET,
@@ -119,97 +137,77 @@ fn listen(config: Config, epfd: RawFd, streams: StreamList) {
                                           &optval as *const _ as *const c_void,
                                           mem::size_of::<c_int>() as u32);
         if opt_result < 0 {
-            error!("Setting SO_REUSEADDR: {}",
-                   Error::from_raw_os_error(errno().0 as i32));
-            return;
-        }
-
-        let serv_addr: *const libc::sockaddr = mem::transmute(&server_addr);
-        let bind_result = libc::bind(server_fd,
-                                     serv_addr,
-                                     mem::size_of::<libc::sockaddr_in>() as u32);
-        if bind_result < 0 {
-            error!("Binding fd: {} - {}",
-                   server_fd,
-                   Error::from_raw_os_error(errno().0 as i32));
-            return;
-        }
-
-        let listen_result = libc::listen(server_fd, 100);
-        if listen_result < 0 {
-            error!("Listening: {}", Error::from_raw_os_error(errno().0 as i32));
-            return;
-        }
-
-        // If we're using SSL, setup our context
-        let using_ssl;
-        let mut config = config;
-        match config.ssl.as_mut() {
-            Some(context) => {
-                ssl_context = context;
-                using_ssl = true;
-            }
-            None => {
-                using_ssl = false;
-            }
-        };
-
-        loop {
-            // Accept new client
-            let result = libc::accept(server_fd,
-                                      ptr::null_mut() as *mut libc::sockaddr,
-                                      ptr::null_mut() as *mut u32);
-            if result < 0 {
-                error!("Accepting new connection: {}",
-                       Error::from_raw_os_error(result as i32));
-                continue;
-            }
-
-            stats::fd_opened();
-
-            // Setup new socket
-            let socket = Socket {
-                fd: result
-            };
-            socket.set_tcp_keepalive(true);
-            socket.set_tcp_nodelay(true);
-
-            // Create new stream and add to server
-            if using_ssl {
-                let _ = SecureStream::new(&(*ssl_context), socket).map(|securestream| {
-                    let stream = Stream {
-                        inner: Box::new(securestream)
-                    };
-                    let fd = stream.as_raw_fd();
-                    add_stream_to_master_list(stream, streams.clone());
-                    add_to_epoll(epfd, fd, streams.clone());
-                }).map_err(|e| {
-                    // If we ever fail here, it is safe to assume everything else has gone to
-                    // shit. No way to clean it up, so we'll just leave. The main process thread
-                    // is joined to this tread, so panic-ing will cause our parent process
-                    // to close out completely.
-                    error!("Creating stream: {}", e);
-                    panic!()
-                });
-            } else {
-                let _ = Nbstream::new(socket).map(|nbstream| {
-                    let stream = Stream {
-                        inner: Box::new(nbstream)
-                    };
-                    let fd = stream.as_raw_fd();
-                    add_stream_to_master_list(stream, streams.clone());
-                    add_to_epoll(epfd, fd, streams.clone());
-                }).map_err(|e| {
-                    // If we ever fail here, it is safe to assume everything else has gone to
-                    // shit. No way to clean it up, so we'll just leave. The main process thread
-                    // is joined to this tread, so panic-ing will cause our parent process
-                    // to close out completely.
-                    error!("Creating stream: {}", e);
-                    panic!()
-                });
-            }
+            return Err(Error::from_raw_os_error(errno().0 as i32));
         }
     }
+
+    Ok(listener)
+}
+
+fn setup_ssl_context(config: &Config) {
+    unsafe {
+        ssl_context = Box::into_raw(Box::new(config.ssl.clone().unwrap()));
+    }
+}
+
+fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, streams: StreamList) {
+    // Update our total opened file descriptors
+    stats::fd_opened();
+
+    // Create and configure a new socket
+    let mut socket = Socket::new(tcp_stream.into_raw_fd());
+    let result = setup_new_socket(&mut socket);
+    if result.is_err() {
+        close_fd(socket.as_raw_fd());
+        return;
+    }
+
+    // Setup our stream
+    let stream = match config.ssl {
+        Some(_) => {
+            let ssl_result = unsafe { SslStream::accept(&(*ssl_context), socket) };
+            match ssl_result {
+                Ok(ssl_stream) => {
+                    let secure_stream = Secure::new(ssl_stream);
+                    Stream::new(Box::new(secure_stream))
+                }
+                Err(ssl_error) => {
+                    error!("Creating SslStream: {}", ssl_error);
+                    return;
+                }
+            }
+        }
+        None => {
+            let plain_text = Plain::new(socket);
+            Stream::new(Box::new(plain_text))
+        }
+    };
+
+    // Add stream to our server
+    add_to_epoll(epfd, stream.as_raw_fd(), streams.clone());
+    add_stream_to_master_list(stream, streams.clone());
+}
+
+fn setup_new_socket(socket: &mut Socket) -> Result<(), ()> {
+    let result = socket.set_nonblocking();
+    if result.is_err() {
+        error!("Setting fd to nonblocking: {}", result.unwrap_err());
+        return Err(());
+    }
+
+    let result = socket.set_tcp_nodelay(true);
+    if result.is_err() {
+        error!("Setting tcp_nodelay: {}", result.unwrap_err());
+        return Err(());
+    }
+
+    let result = socket.set_tcp_keepalive(true);
+    if result.is_err() {
+        error!("Setting tcp_keepalive: {}", result.unwrap_err());
+        return Err(());
+    }
+
+    Ok(())
 }
 
 /// Event loop for handling all epoll events
@@ -336,7 +334,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
 
                 // TODO - Refactor once better function passing traits are available in stable.
                 let handler_cpy = handler.clone();
-                let stream_cpy = Stream { inner: stream.inner.clone_h_stream() };
+                let stream_cpy = stream.clone();
                 let payload_cpy = payload.clone();
                 unsafe {
                     (*pool).run(move || {

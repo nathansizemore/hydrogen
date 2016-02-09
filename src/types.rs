@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::collections::LinkedList;
 use std::os::unix::io::RawFd;
 
-use stream::Stream;
+use ss::Stream;
 
 /// The `EventHandler` trait allows for hydrogen event dispatching.
 ///
