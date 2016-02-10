@@ -185,11 +185,7 @@ pub fn fd_closed() {
     };
 
     let d = guard.deref_mut();
-    if d.fds_closed == 0 {
-        warn!("Attempting to decrement fds into negative space");
-        return;
-    }
-    d.fds_opened -= 1;
+    d.fds_closed += 1;
 }
 
 /// Returns the structure as a JSON serialized Vec<u8> with CPU data for perf_sec time
