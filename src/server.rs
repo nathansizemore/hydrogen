@@ -82,11 +82,11 @@ pub fn begin(config: Config, handler: Box<EventHandler>) {
     let epfd3 = epfd.clone();
     let streams3 = sockets.clone();
     let prox = thread::Builder::new()
-                   .name("TCP Incoming Listener".to_string())
-                   .spawn(move || {
-                       listen(config, epfd3, streams3);
-                   })
-                   .unwrap();
+        .name("TCP Incoming Listener".to_string())
+        .spawn(move || {
+           listen(config, epfd3, streams3);
+        })
+        .unwrap();
 
     // Stay alive forever, or at least we hope
     let _ = prox.join();
@@ -184,8 +184,9 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
     };
 
     // Add stream to our server
-    add_to_epoll(epfd, stream.as_raw_fd(), streams.clone());
+    let fd = stream.as_raw_fd();
     add_stream_to_master_list(stream, streams.clone());
+    add_to_epoll(epfd, fd, streams.clone());
 }
 
 fn setup_new_socket(socket: &mut Socket) -> Result<(), ()> {
