@@ -15,24 +15,24 @@ use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 use std::collections::LinkedList;
 
 use libc;
-use errno::errno;
+use libc::{c_int, c_void};
 use epoll;
 use epoll::util::*;
 use epoll::EpollEvent;
-use libc::{c_int, c_void};
-use config::Config;
+use errno::errno;
+use threadpool::ThreadPool;
 use openssl::ssl::{SslStream, SslContext};
-
-use stats;
-use types::*;
-use resources::ResourcePool;
 use ss::nonblocking::plain::Plain;
 use ss::nonblocking::secure::Secure;
 use ss::{Socket, Stream, SRecv, SSend, TcpOptions, SocketOptions};
 
+use stats;
+use types::*;
+use config::Config;
+
 
 // We need to be able to access our resource pool from several methods
-static mut pool: *mut ResourcePool = 0 as *mut ResourcePool;
+static mut thread_pool: *mut ThreadPool = 0 as *mut ThreadPool;
 
 // Global SslContext
 static mut ssl_context: *mut SslContext = 0 as *mut SslContext;
@@ -50,9 +50,9 @@ pub fn begin(config: Config, handler: Box<EventHandler>) {
     let sockets = Arc::new(Mutex::new(LinkedList::<Stream>::new()));
 
     // Resource pool
-    let mut rp = ResourcePool::new(config.workers);
+    let mut tp = ThreadPool::new(config.workers);
     unsafe {
-        pool = &mut rp;
+        thread_pool = &mut tp;
     }
 
     // Wrap our event handler into something that can be safely shared
@@ -291,7 +291,7 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
 
         let stream_fd = stream.as_raw_fd();
         unsafe {
-            (*pool).run(move || {
+            (*thread_pool).execute(move || {
                 let Handler(ptr) = handler;
                 (*ptr).on_stream_closed(stream_fd);
             });
@@ -317,7 +317,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
                     let sec = unsafe { *f32ptr };
                     let stream_cpy = stream.clone();
                     unsafe {
-                        (*pool).run(move || {
+                        (*thread_pool).execute(move || {
                             let mut s = stream_cpy.clone();
                             let result = stats::as_serialized_buffer(sec);
                             if result.is_ok() {
@@ -333,7 +333,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
                 let stream_cpy = stream.clone();
                 let payload_cpy = payload.clone();
                 unsafe {
-                    (*pool).run(move || {
+                    (*thread_pool).execute(move || {
                         let Handler(ptr) = handler_cpy;
                         (*ptr).on_data_received(stream_cpy.clone(), payload_cpy.clone());
                     });
@@ -347,7 +347,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
 
             let stream_fd = stream.as_raw_fd();
             unsafe {
-                (*pool).run(move || {
+                (*thread_pool).execute(move || {
                     let Handler(ptr) = handler;
                     (*ptr).on_stream_closed(stream_fd.clone());
                 });

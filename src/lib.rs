@@ -15,6 +15,7 @@ extern crate epoll;
 extern crate errno;
 extern crate openssl;
 extern crate num_cpus;
+extern crate threadpool;
 extern crate rustc_serialize;
 extern crate simple_stream as ss;
 
@@ -31,8 +32,6 @@ pub mod types;
 
 mod stats;
 mod server;
-mod resources;
-mod workerthread;
 
 
 /// Starts the server using the passed `config` options.

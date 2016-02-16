@@ -13,7 +13,7 @@ use log::LogLevelFilter;
 pub struct Config {
     pub addr: String,
     pub port: u16,
-    pub workers: u8,
+    pub workers: usize,
     pub ssl: Option<SslContext>,
     pub log_level: LogLevelFilter,
 }
