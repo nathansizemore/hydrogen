@@ -6,7 +6,7 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::{mem, thread};
@@ -341,7 +341,7 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
             }
             Ok(())
         }
-        Err(e) => {
+        Err(_) => {
             remove_fd_from_epoll(epfd, stream.as_raw_fd());
             close_fd(stream.as_raw_fd());
 
