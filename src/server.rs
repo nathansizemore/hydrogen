@@ -188,7 +188,7 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
     // Add stream to our server
     let fd = stream.as_raw_fd();
     add_stream_to_master_list(stream, streams.clone());
-    add_to_epoll(epfd, fd, streams.clone());
+    add_fd_to_epoll(epfd, fd, streams.clone());
 }
 
 fn setup_new_socket(socket: &mut Socket) -> Result<(), ()> {
@@ -240,63 +240,67 @@ fn event_loop(epfd: RawFd, streams: StreamList, handler: Handler) {
 fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, handler: Handler) {
     const READ_EVENT: u32 = event_type::EPOLLIN;
 
-    // Locate the stream the event was for
-    let mut stream;
-    {
-        // Mutex lock
-        // Find the stream the event was for
-        let mut guard = match streams.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => {
-                warn!("StreamList Mutex was poisoned, using anyway");
-                poisoned.into_inner()
-            }
-        };
-        let list = guard.deref_mut();
+    let fd = event.data as RawFd;
+    let find_result = try_find_stream_from_fd(streams.clone(), fd);
+    if find_result.is_err() {
+        remove_fd_from_epoll(epfd, fd);
+        close_fd(fd);
+    }
 
-        let mut found = false;
-        let mut index = 1usize;
-        for s in list.iter() {
-            if s.as_raw_fd() == event.data as RawFd {
-                found = true;
-                break;
-            }
-            index += 1;
-        }
-
-        if !found {
-            let fd = event.data as RawFd;
-            remove_fd_from_epoll(epfd, fd);
-            close_fd(fd);
-            return;
-        }
-
-        if index == 1 {
-            stream = list.pop_front().unwrap();
-        } else {
-            let mut split = list.split_off(index - 1);
-            stream = split.pop_front().unwrap();
-            list.append(&mut split);
-        }
-    } // Mutex unlock
-
-    if (event.events & READ_EVENT) > 0 {
-        let _ = handle_read_event(epfd, &mut stream, handler).map(|_| {
-            add_stream_to_master_list(stream, streams.clone());
-        });
+    let stream = find_result.unwrap();
+    let read_event = if (event.events & READ_EVENT) > 0 {
+        true
     } else {
-        let fd = stream.as_raw_fd();
+        false
+    };
+
+    if read_event {
+        handle_read_event(epfd, stream, streams, handler);
+        // TODO - Ensure added back to stream list
+    } else {
         remove_fd_from_epoll(epfd, fd);
         close_fd(fd);
 
-        let stream_fd = stream.as_raw_fd();
         unsafe {
             (*thread_pool).execute(move || {
                 let Handler(ptr) = handler;
-                (*ptr).on_stream_closed(stream_fd);
+                (*ptr).on_stream_closed(fd);
             });
         }
     }
+}
+
+fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()> {
+    let mut guard = match streams.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner()
+    };
+    let list = guard.deref_mut();
+
+    let mut found = false;
+    let mut index = 1usize;
+    for stream in list.iter() {
+        if stream.as_raw_fd() == fd {
+            found = true;
+            break;
+        }
+        index += 1;
+    }
+
+    let result = if found {
+        if index == 1 {
+            Ok(list.pop_front().unwrap())
+        } else {
+            let mut split = list.split_off(index - 1);
+            let stream = split.pop_front().unwrap();
+            list.append(&mut split);
+            Ok(stream)
+        }
+    } else {
+        Err(())
+    };
+
+    result
 }
 
 /// Reads all available data on the stream.
@@ -305,75 +309,98 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
 /// resource pool.
 ///
 /// If an error occurs during the read, the stream is dropped from the server.
-fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Result<(), ()> {
-    match stream.recv() {
-        Ok(_) => {
-            let mut rx_queue = stream.drain_rx_queue();
-            for payload in rx_queue.iter_mut() {
-                // Check if this is a request for stats
-                if payload.len() == 6 && payload[0] == 0x04 && payload[1] == 0x04 {
-                    let u8ptr: *const u8 = &payload[2] as *const _;
-                    let f32ptr: *const f32 = u8ptr as *const _;
-                    let sec = unsafe { *f32ptr };
-                    let stream_cpy = stream.clone();
-                    unsafe {
-                        (*thread_pool).execute(move || {
-                            let mut s = stream_cpy.clone();
-                            let result = stats::as_serialized_buffer(sec);
-                            if result.is_ok() {
-                                let _ = s.send(&result.unwrap()[..]);
-                            }
-                        });
-                    }
-                    return Ok(());
-                }
+fn handle_read_event(epfd: RawFd, stream: Stream, streams: StreamList, handler: Handler) {
+    let fd = stream.as_raw_fd();
 
-                // TODO - Refactor once better function passing traits are available in stable.
-                let handler_cpy = handler.clone();
-                let stream_cpy = stream.clone();
-                let payload_cpy = payload.clone();
-                unsafe {
-                    (*thread_pool).execute(move || {
-                        let Handler(ptr) = handler_cpy;
-                        (*ptr).on_data_received(stream_cpy.clone(), payload_cpy.clone());
-                    });
-                }
-            }
-            Ok(())
+    let mut stream = stream;
+    let recv_result = stream.recv();
+    if recv_result.is_err() {
+        remove_fd_from_epoll(epfd, fd);
+        close_fd(fd);
+
+        unsafe {
+            (*thread_pool).execute(move || {
+                let Handler(ptr) = handler;
+                (*ptr).on_stream_closed(fd);
+            });
         }
-        Err(_) => {
-            remove_fd_from_epoll(epfd, stream.as_raw_fd());
-            close_fd(stream.as_raw_fd());
+        return;
+    }
 
-            let stream_fd = stream.as_raw_fd();
+    let mut msg_queue = stream.drain_rx_queue();
+    for msg in msg_queue.drain(..) {
+        let s = stream.clone();
+        let sl = streams.clone();
+        let h = handler.clone();
+
+        if msg_is_stats_request(&msg) {
+            handle_stats_request(&msg, epfd, s, sl);
+        } else {
             unsafe {
                 (*thread_pool).execute(move || {
-                    let Handler(ptr) = handler;
-                    (*ptr).on_stream_closed(stream_fd.clone());
+                    let Handler(ptr) = h;
+                    (*ptr).on_data_received(s, msg);
                 });
             }
-
-            Err(())
         }
     }
+
+    add_stream_to_master_list(stream, streams);
+}
+
+#[inline]
+fn msg_is_stats_request(msg: &[u8]) -> bool {
+    if msg.len() == 6 && msg[0] == 0x04 && msg[1] == 0x04 {
+        true
+    } else {
+        false
+    }
+}
+
+fn handle_stats_request(buf: &[u8], epfd: RawFd, stream: Stream, streams: StreamList) {
+    let stream_clone = stream.clone();
+    let u8ptr: *const u8 = &buf[2] as *const _;
+    let f32ptr: *const f32 = u8ptr as *const _;
+    unsafe {
+        let sec = *f32ptr;
+        (*thread_pool).execute(move || {
+            let stats_result = stats::as_serialized_buffer(sec);
+            if stats_result.is_err() {
+                error!("Retrieving stats");
+                return;
+            }
+
+            let stats_buffer = stats_result.unwrap();
+
+            let mut stream = stream;
+            let send_result = stream.send(&stats_buffer[..]);
+            if send_result.is_err() {
+                error!("Writing to stream: {}", send_result.unwrap_err());
+                let fd = stream.as_raw_fd();
+                remove_fd_from_epoll(epfd, fd);
+                close_fd(fd);
+            }
+        });
+    }
+
+    add_stream_to_master_list(stream_clone, streams);
 }
 
 /// Inserts the stream back into the master list of streams
 fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
     let mut guard = match streams.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            warn!("StreamList Mutex failed, using anyway...");
-            poisoned.into_inner()
-        }
+        Ok(g) => g,
+        Err(p) => p.into_inner()
     };
+
     let stream_list = guard.deref_mut();
     stream_list.push_back(stream);
+
     stats::conn_recv();
 }
 
 /// Adds a new fd to the epoll instance
-fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
+fn add_fd_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
     let result = epoll::ctl(epfd,
                             ctl_op::ADD,
                             fd,
@@ -384,7 +411,7 @@ fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
 
     if result.is_err() {
         let e = result.unwrap_err();
-        error!("poll::CtrlError during add: {}", e);
+        error!("epoll::CtrlError during add: {}", e);
         remove_fd_from_list(fd, streams.clone());
         close_fd(fd);
     }
@@ -409,18 +436,15 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
 /// Removes stream with fd from master list
 fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
     let mut guard = match streams.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            warn!("StreamList Mutex was poisoned, using anyway");
-            poisoned.into_inner()
-        }
+        Ok(g) => g,
+        Err(p) => p.into_inner()
     };
     let list = guard.deref_mut();
 
     let mut found = false;
     let mut index = 1usize;
-    for s in list.iter() {
-        if s.as_raw_fd() == fd {
+    for stream in list.iter() {
+        if stream.as_raw_fd() == fd {
             found = true;
             break;
         }
@@ -428,7 +452,6 @@ fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
     }
 
     if !found {
-        trace!("fd: {} not found in list", fd);
         return;
     }
 
