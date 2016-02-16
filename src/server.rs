@@ -165,6 +165,7 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
     // Setup our stream
     let stream = match config.ssl {
         Some(_) => {
+            let sock_fd = socket.as_raw_fd();
             let ssl_result = unsafe { SslStream::accept(&(*ssl_context), socket) };
             match ssl_result {
                 Ok(ssl_stream) => {
@@ -173,6 +174,7 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
                 }
                 Err(ssl_error) => {
                     error!("Creating SslStream: {}", ssl_error);
+                    close_fd(sock_fd);
                     return;
                 }
             }
@@ -263,8 +265,6 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
         }
 
         if !found {
-            error!("Could not find fd in stream list? Removing from epoll and closing fd");
-
             let fd = event.data as RawFd;
             remove_fd_from_epoll(epfd, fd);
             close_fd(fd);
@@ -281,13 +281,10 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
     } // Mutex unlock
 
     if (event.events & READ_EVENT) > 0 {
-        trace!("event was read event");
         let _ = handle_read_event(epfd, &mut stream, handler).map(|_| {
             add_stream_to_master_list(stream, streams.clone());
         });
     } else {
-        trace!("event was drop event");
-
         let fd = stream.as_raw_fd();
         remove_fd_from_epoll(epfd, fd);
         close_fd(fd);
@@ -309,8 +306,6 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
 ///
 /// If an error occurs during the read, the stream is dropped from the server.
 fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Result<(), ()> {
-    trace!("handle read event");
-
     match stream.recv() {
         Ok(_) => {
             let mut rx_queue = stream.drain_rx_queue();
@@ -347,12 +342,6 @@ fn handle_read_event(epfd: RawFd, stream: &mut Stream, handler: Handler) -> Resu
             Ok(())
         }
         Err(e) => {
-            if e.kind() == ErrorKind::WouldBlock {
-                return Ok(());
-            }
-
-            error!("stream.fd: {} during read: {}", stream.as_raw_fd(), e);
-
             remove_fd_from_epoll(epfd, stream.as_raw_fd());
             close_fd(stream.as_raw_fd());
 
@@ -393,11 +382,9 @@ fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
                                 events: EVENTS,
                             });
 
-    if result.is_ok() {
-        trace!("New fd added to epoll");
-    } else {
+    if result.is_err() {
         let e = result.unwrap_err();
-        error!("CtrlError during add: {}", e);
+        error!("poll::CtrlError during add: {}", e);
         remove_fd_from_list(fd, streams.clone());
         close_fd(fd);
     }
@@ -405,8 +392,6 @@ fn add_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
 
 /// Removes a fd from the epoll instance
 fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
-    debug!("removing fd from epoll");
-
     // In kernel versions before 2.6.9, the EPOLL_CTL_DEL operation required
     // a non-null pointer in event, even though this argument is ignored.
     // Since Linux 2.6.9, event can be specified as NULL when using
@@ -421,10 +406,8 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
                 .map_err(|e| warn!("Epoll CtrlError during del: {}", e));
 }
 
-/// Removes stream with id from master list
+/// Removes stream with fd from master list
 fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
-    trace!("removing fd: {} from master list", fd);
-
     let mut guard = match streams.lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
