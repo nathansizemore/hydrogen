@@ -310,6 +310,7 @@ fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()>
 ///
 /// If an error occurs during the read, the stream is dropped from the server.
 fn handle_read_event(epfd: RawFd, stream: Stream, streams: StreamList, handler: Handler) {
+    trace!("handle_read_event");
     let fd = stream.as_raw_fd();
 
     let mut stream = stream;
@@ -358,6 +359,7 @@ fn msg_is_stats_request(msg: &[u8]) -> bool {
 }
 
 fn handle_stats_request(buf: &[u8], epfd: RawFd, stream: Stream, streams: StreamList) {
+    trace!("handle_stats_request");
     let stream_clone = stream.clone();
     let u8ptr: *const u8 = &buf[2] as *const _;
     let f32ptr: *const f32 = u8ptr as *const _;
