@@ -256,7 +256,6 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
 
     if read_event {
         handle_read_event(epfd, stream, streams, handler);
-        // TODO - Ensure added back to stream list
     } else {
         remove_fd_from_epoll(epfd, fd);
         close_fd(fd);
@@ -310,7 +309,6 @@ fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()>
 ///
 /// If an error occurs during the read, the stream is dropped from the server.
 fn handle_read_event(epfd: RawFd, stream: Stream, streams: StreamList, handler: Handler) {
-    trace!("handle_read_event");
     let fd = stream.as_raw_fd();
 
     let mut stream = stream;
