@@ -7,10 +7,10 @@
 
 
 use std::sync::{Arc, Mutex};
-use std::collections::LinkedList;
 use std::os::unix::io::RawFd;
 
 use ss::Stream;
+use slab::Slab;
 
 /// The `EventHandler` trait allows for hydrogen event dispatching.
 ///
@@ -23,9 +23,9 @@ pub trait EventHandler {
 }
 
 /// Internal list of all currently connected streams
-pub type StreamList = Arc<Mutex<LinkedList<Stream>>>;
+pub type StreamList = Arc<Mutex<Slab<Stream, usize>>>;
 
-/// Used as a strongly typed wrapper for passing around `EventHandler`
+/// Used as a strongly typed wrapper for passing around a `*mut EventHandler`
 pub struct Handler(pub *mut EventHandler);
 unsafe impl Send for Handler {}
 unsafe impl Sync for Handler {}
@@ -39,7 +39,7 @@ impl Clone for Handler {
     }
 }
 
-/// Used as a strongly typed wrapper for passing around `EventHandler` functions
+/// Used as a strongly typed wrapper for passing around a `*mut Fn()`
 pub struct Event(pub *mut Fn());
 unsafe impl Send for Event {}
 unsafe impl Sync for Event {}

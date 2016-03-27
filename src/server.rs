@@ -12,10 +12,10 @@ use std::sync::{Arc, Mutex};
 use std::{mem, thread};
 use std::net::{TcpStream, TcpListener};
 use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
-use std::collections::LinkedList;
 
 use libc;
 use libc::{c_int, c_void};
+use slab::Slab;
 use epoll;
 use epoll::util::*;
 use epoll::EpollEvent;
@@ -47,7 +47,7 @@ const EVENTS: u32 = event_type::EPOLLET | event_type::EPOLLIN;
 /// Starts the epoll wait and incoming connection listener threads.
 pub fn begin(config: Config, handler: Box<EventHandler>) {
     // Master socket list
-    let sockets = Arc::new(Mutex::new(LinkedList::<Stream>::new()));
+    let sockets = Arc::new(Mutex::new(Slab::<Stream, usize>::new(100000)));
 
     // Resource pool
     let mut tp = ThreadPool::new(config.workers);
@@ -64,7 +64,7 @@ pub fn begin(config: Config, handler: Box<EventHandler>) {
     if result.is_err() {
         let err = result.unwrap_err();
         error!("Unable to create epoll instance: {}", err);
-        panic!()
+        return;
     }
     let epfd = result.unwrap();
 
@@ -154,18 +154,15 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
     // Update our total opened file descriptors
     stats::fd_opened();
 
-    // Create and configure a new socket
-    let mut socket = Socket::new(tcp_stream.into_raw_fd());
-    let result = setup_new_socket(&mut socket);
-    if result.is_err() {
-        close_fd(socket.as_raw_fd());
-        return;
-    }
+    // Create new socket
+    let socket = Socket::new(tcp_stream.into_raw_fd());
+
+    // Socket's fd for option setting after connection has been established
+    let fd = socket.as_raw_fd();
 
     // Setup our stream
     let stream = match config.ssl {
         Some(_) => {
-            let sock_fd = socket.as_raw_fd();
             let ssl_result = unsafe { SslStream::accept(&(*ssl_context), socket) };
             match ssl_result {
                 Ok(ssl_stream) => {
@@ -174,7 +171,7 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
                 }
                 Err(ssl_error) => {
                     error!("Creating SslStream: {}", ssl_error);
-                    close_fd(sock_fd);
+                    close_fd(fd);
                     return;
                 }
             }
@@ -185,12 +182,21 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
         }
     };
 
+    // Setup various socket options
+    let mut opt_socket = Socket::new(fd);
+    let result = setup_new_socket(&mut opt_socket);
+    if result.is_err() {
+        close_fd(fd);
+        return;
+    }
+
     // Add stream to our server
     let fd = stream.as_raw_fd();
     add_stream_to_master_list(stream, streams.clone());
     add_fd_to_epoll(epfd, fd, streams.clone());
 }
 
+/// Sets up various socket options
 fn setup_new_socket(socket: &mut Socket) -> Result<(), ()> {
     let result = socket.set_nonblocking();
     if result.is_err() {
@@ -277,29 +283,25 @@ fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()>
     let list = guard.deref_mut();
 
     let mut found = false;
-    let mut index = 1usize;
-    for stream in list.iter() {
-        if stream.as_raw_fd() == fd {
-            found = true;
-            break;
-        }
-        index += 1;
+    let mut index = 0;
+    for x in 0..list.count() {
+        match list.get(x) {
+            Some(stream) => {
+                if stream.as_raw_fd() == fd {
+                    found = true;
+                    index = x;
+                    break;
+                }
+            }
+            None => { }
+        };
     }
 
-    let result = if found {
-        if index == 1 {
-            Ok(list.pop_front().unwrap())
-        } else {
-            let mut split = list.split_off(index - 1);
-            let stream = split.pop_front().unwrap();
-            list.append(&mut split);
-            Ok(stream)
-        }
+    if found {
+        Ok(list.remove(index).unwrap())
     } else {
         Err(())
-    };
-
-    result
+    }
 }
 
 /// Reads all available data on the stream.
@@ -388,13 +390,22 @@ fn handle_stats_request(buf: &[u8], epfd: RawFd, stream: Stream, streams: Stream
 
 /// Inserts the stream back into the master list of streams
 fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
-    let mut guard = match streams.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner()
-    };
+    { // Mutex lock
+        let mut guard = match streams.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        };
 
-    let stream_list = guard.deref_mut();
-    stream_list.push_back(stream);
+        let list = guard.deref_mut();
+
+        // Allocate if we need more slab space
+        if !list.has_remaining() {
+            let extra_capacity = list.count();
+            list.grow(extra_capacity);
+        }
+
+        let _ = list.insert(stream);
+    } // Mutex unlock
 
     stats::conn_recv();
 }
@@ -410,8 +421,8 @@ fn add_fd_to_epoll(epfd: RawFd, fd: RawFd, streams: StreamList) {
                             });
 
     if result.is_err() {
-        let e = result.unwrap_err();
-        error!("epoll::CtrlError during add: {}", e);
+        error!("epoll::CtrlError during add: {}", result.unwrap_err());
+
         remove_fd_from_list(fd, streams.clone());
         close_fd(fd);
     }
@@ -435,33 +446,34 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
 
 /// Removes stream with fd from master list
 fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
-    let mut guard = match streams.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner()
-    };
-    let list = guard.deref_mut();
+    { // Mutex lock
+        let mut guard = match streams.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        };
+        let list = guard.deref_mut();
 
-    let mut found = false;
-    let mut index = 1usize;
-    for stream in list.iter() {
-        if stream.as_raw_fd() == fd {
-            found = true;
-            break;
+        let mut found = false;
+        let mut index = 0;
+        for x in 0..list.count() {
+            match list.get(x) {
+                Some(stream) => {
+                    if stream.as_raw_fd() == fd {
+                        found = true;
+                        index = x;
+                        break;
+                    }
+                }
+                None => { }
+            };
         }
-        index += 1;
-    }
 
-    if !found {
-        return;
-    }
+        if !found {
+            return;
+        }
 
-    if index == 1 {
-        list.pop_front();
-    } else {
-        let mut split = list.split_off(index - 1);
-        split.pop_front();
-        list.append(&mut split);
-    }
+        list.remove(index);
+    } // Mutex unlock
 
     stats::conn_lost();
 }
