@@ -204,7 +204,7 @@ fn setup_new_socket(socket: &mut Socket) -> Result<(), ()> {
         return Err(());
     }
 
-    let result = socket.set_tcp_keepalive(true);
+    let result = socket.set_keepalive(true);
     if result.is_err() {
         error!("Setting tcp_keepalive: {}", result.unwrap_err());
         return Err(());
