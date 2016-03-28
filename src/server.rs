@@ -251,11 +251,19 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
     let fd = event.data as RawFd;
     let find_result = try_find_stream_from_fd(streams.clone(), fd);
     if find_result.is_err() {
-        remove_fd_from_epoll(epfd, fd);
-        close_fd(fd);
+        warn!("=== Don't forget about this ===");
+        warn!("Stream not found for fd: {}. Assuming read event already occured?", fd);
+        warn!("If this seems to be leaking fds, find a better way. Maybe epoll::ONESHOT ?");
+        warn!("===============================");
+        return;
+        // remove_fd_from_epoll(epfd, fd);
+        // close_fd(fd);
     }
 
     let stream = find_result.unwrap();
+
+    trace!("Stream with fd: {} removed for epoll event", stream.as_raw_fd());
+
     let read_event = if (event.events & READ_EVENT) > 0 {
         true
     } else {
@@ -401,6 +409,8 @@ fn handle_stats_request(buf: &[u8], epfd: RawFd, stream: Stream, streams: Stream
 
 /// Inserts the stream back into the master list of streams
 fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
+    trace!("Adding fd: {} to StreamList", stream.as_raw_fd());
+
     { // Mutex lock
         let mut guard = match streams.lock() {
             Ok(g) => g,
