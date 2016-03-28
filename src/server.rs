@@ -251,10 +251,14 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
     let fd = event.data as RawFd;
     let find_result = try_find_stream_from_fd(streams.clone(), fd);
     if find_result.is_err() {
-        warn!("=== Don't forget about this ===");
-        warn!("Stream not found for fd: {}. Assuming read event already occured?", fd);
-        warn!("If this seems to be leaking fds, find a better way. Maybe epoll::ONESHOT ?");
-        warn!("===============================");
+        warn!("========================= Don't forget about this =========================");
+        warn!("Stream not found in StreamList...?");
+        warn!("fd: {}", fd);
+        warn!("event: {}", event.events);
+        warn!("READ_EVENT?: {}", ((event.events & READ_EVENT) > 0));
+        warn!("Assuming another read event occured before read loop was finished?");
+        warn!("If this seems to be leaking fds, find a better way. Maybe epoll::ONESHOT?");
+        warn!("===========================================================================");
         return;
         // remove_fd_from_epoll(epfd, fd);
         // close_fd(fd);
@@ -288,17 +292,22 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
 }
 
 fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()> {
+    trace!("try_find_stream_from_fd");
+
     let mut guard = match streams.lock() {
         Ok(g) => g,
         Err(p) => p.into_inner()
     };
     let list = guard.deref_mut();
 
+    trace!("===== StreamList =====");
+    trace!("count: {}", list.count());
     let mut found = false;
     let mut index = 0;
     for x in 0..list.count() {
         match list.get(x) {
             Some(stream) => {
+                trace!("list[{}]: {}", x, fd);
                 if stream.as_raw_fd() == fd {
                     found = true;
                     index = x;
@@ -308,6 +317,7 @@ fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()>
             None => { }
         };
     }
+    trace!("======================");
 
     if found {
         Ok(list.remove(index).unwrap())
