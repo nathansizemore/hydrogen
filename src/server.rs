@@ -184,8 +184,8 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
 
     // Setup various socket options
     let mut opt_socket = Socket::new(fd);
-    let result = setup_new_socket(&mut opt_socket);
-    if result.is_err() {
+    let opt_set_result = setup_new_socket(&mut opt_socket);
+    if opt_set_result.is_err() {
         close_fd(fd);
         return;
     }
@@ -194,6 +194,8 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, st
     let fd = stream.as_raw_fd();
     add_stream_to_master_list(stream, streams.clone());
     add_fd_to_epoll(epfd, fd, streams.clone());
+
+    stats::conn_recv();
 }
 
 /// Sets up various socket options
@@ -263,6 +265,8 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, streams: StreamList, hand
     if read_event {
         handle_read_event(epfd, stream, streams, handler);
     } else {
+        trace!("Epoll reported non-read event for fd: {}", fd);
+
         remove_fd_from_epoll(epfd, fd);
         close_fd(fd);
 
@@ -300,6 +304,7 @@ fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()>
     if found {
         Ok(list.remove(index).unwrap())
     } else {
+        warn!("Unable to locate fd: {} in StreamList", fd);
         Err(())
     }
 }
@@ -313,9 +318,13 @@ fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()>
 fn handle_read_event(epfd: RawFd, stream: Stream, streams: StreamList, handler: Handler) {
     let fd = stream.as_raw_fd();
 
+    trace!("Read event for fd: {}", fd);
+
     let mut stream = stream;
     let recv_result = stream.recv();
     if recv_result.is_err() {
+        trace!("Error during recv (disconnect/eof/etc... not real error), closing fd");
+
         remove_fd_from_epoll(epfd, fd);
         close_fd(fd);
 
@@ -360,6 +369,7 @@ fn msg_is_stats_request(msg: &[u8]) -> bool {
 
 fn handle_stats_request(buf: &[u8], epfd: RawFd, stream: Stream, streams: StreamList) {
     trace!("handle_stats_request");
+
     let stream_clone = stream.clone();
     let u8ptr: *const u8 = &buf[2] as *const _;
     let f32ptr: *const f32 = u8ptr as *const _;
@@ -378,6 +388,7 @@ fn handle_stats_request(buf: &[u8], epfd: RawFd, stream: Stream, streams: Stream
             let send_result = stream.send(&stats_buffer[..]);
             if send_result.is_err() {
                 error!("Writing to stream: {}", send_result.unwrap_err());
+
                 let fd = stream.as_raw_fd();
                 remove_fd_from_epoll(epfd, fd);
                 close_fd(fd);
@@ -401,13 +412,14 @@ fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
         // Allocate if we need more slab space
         if !list.has_remaining() {
             let extra_capacity = list.count();
+
+            warn!("Slab filled, allocating {} extra slots", extra_capacity);
+
             list.grow(extra_capacity);
         }
 
         let _ = list.insert(stream);
     } // Mutex unlock
-
-    stats::conn_recv();
 }
 
 /// Adds a new fd to the epoll instance
@@ -446,6 +458,8 @@ fn remove_fd_from_epoll(epfd: RawFd, fd: RawFd) {
 
 /// Removes stream with fd from master list
 fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
+    trace!("Attempting reoval of fd: {}", fd);
+
     { // Mutex lock
         let mut guard = match streams.lock() {
             Ok(g) => g,
@@ -469,17 +483,22 @@ fn remove_fd_from_list(fd: RawFd, streams: StreamList) {
         }
 
         if !found {
+            warn!("fd: {} not found in list when attempting removal", fd);
             return;
         }
 
         list.remove(index);
     } // Mutex unlock
 
+    trace!("Removal of fd: {} successful", fd);
+
     stats::conn_lost();
 }
 
 /// Closes a fd with the kernel
 fn close_fd(fd: RawFd) {
+    trace!("Attempting close for fd: {}", fd);
+
     unsafe {
         let result = libc::close(fd);
         if result < 0 {
@@ -488,5 +507,8 @@ fn close_fd(fd: RawFd) {
             return;
         }
     }
+
+    trace!("fd: {} closed successfully", fd);
+
     stats::fd_closed();
 }
