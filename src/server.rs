@@ -300,22 +300,19 @@ fn try_find_stream_from_fd(streams: StreamList, fd: RawFd) -> Result<Stream, ()>
     };
     let list = guard.deref_mut();
 
+
+
     trace!("===== StreamList =====");
     trace!("count: {}", list.count());
     let mut found = false;
     let mut index = 0;
-    for x in 0..list.count() {
-        match list.get(x) {
-            Some(stream) => {
-                trace!("list[{}]: {}", x, stream.as_raw_fd());
-                if stream.as_raw_fd() == fd {
-                    found = true;
-                    index = x;
-                    break;
-                }
-            }
-            None => { }
-        };
+    for (entry, x) in list.iter() {
+        trace!("list[{}]: {}", x, stream.as_raw_fd());
+        if stream.as_raw_fd() == fd {
+            index = x;
+            found = true;
+            break;
+        }
     }
     trace!("======================");
 
