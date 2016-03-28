@@ -435,7 +435,9 @@ fn add_stream_to_master_list(stream: Stream, streams: StreamList) {
             list.grow(extra_capacity);
         }
 
-        let _ = list.insert(stream);
+        let _ = list.insert_with(|| {
+            
+        });
     } // Mutex unlock
 }
 
