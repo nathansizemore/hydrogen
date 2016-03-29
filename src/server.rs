@@ -148,7 +148,12 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, sl
     stats::fd_opened();
 
     let fd = tcp_stream.into_raw_fd();
-    let socket = Socket::new(fd);
+    let mut socket = Socket::new(fd);
+    let opt_set_result = setup_new_socket(&mut socket);
+    if opt_set_result.is_err() {
+        close_fd(fd);
+        return;
+    }
 
     // Setup our stream
     let stream = match config.ssl {
@@ -176,12 +181,12 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, sl
     // Options are set _after_ the stream is configured for a less error prone
     // OpenSSL handshake process.
     {
-        let mut opt_socket = Socket::new(fd);
-        let opt_set_result = setup_new_socket(&mut opt_socket);
-        if opt_set_result.is_err() {
-            close_fd(fd);
-            return;
-        }
+        // let mut opt_socket = Socket::new(fd);
+        // let opt_set_result = setup_new_socket(&mut opt_socket);
+        // if opt_set_result.is_err() {
+        //     close_fd(fd);
+        //     return;
+        // }
     }
 
     // Add stream to our server
