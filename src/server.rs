@@ -225,6 +225,7 @@ fn event_loop(epfd: RawFd, slab_mutex: SlabMutex, handler: Handler) {
     loop {
         match epoll::wait(epfd, &mut events[..], -1) {
             Ok(num_events) => {
+                trace!("Epoll events to process: {}", num_events);
                 for x in 0..num_events as usize {
                     handle_epoll_event(epfd, &events[x], slab_mutex.clone(), handler.clone());
                 }
@@ -243,6 +244,9 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, slab_mutex: SlabMutex, ha
     const READ_EVENT: u32 = event_type::EPOLLIN;
 
     let fd = event.data as RawFd;
+
+    trace!("handle epoll event for fd: {}", fd);
+
     let find_result = try_find_stream_from_fd(slab_mutex.clone(), fd);
     if find_result.is_err() {
         warn!("========================= Don't forget about this =========================");
