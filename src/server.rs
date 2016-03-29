@@ -200,11 +200,11 @@ fn setup_new_socket(socket: &mut Socket) -> Result<(), ()> {
         return Err(());
     }
 
-    let result = socket.set_tcp_nodelay(true);
-    if result.is_err() {
-        error!("Setting tcp_nodelay: {}", result.unwrap_err());
-        return Err(());
-    }
+    // let result = socket.set_tcp_nodelay(true);
+    // if result.is_err() {
+    //     error!("Setting tcp_nodelay: {}", result.unwrap_err());
+    //     return Err(());
+    // }
 
     let result = socket.set_keepalive(true);
     if result.is_err() {
