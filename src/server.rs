@@ -295,10 +295,12 @@ fn try_find_stream_from_fd(slab_mutex: SlabMutex, fd: RawFd) -> Result<Stream, (
     let mut found = false;
     for x in 0..slab.len() {
         match slab[x] {
-            Some(_) => {
-                offset = x;
-                found = true;
-                break;
+            Some(ref stream) => {
+                if stream.as_raw_fd() == fd {
+                    offset = x;
+                    found = true;
+                    break;
+                }
             }
             None => { }
         }
