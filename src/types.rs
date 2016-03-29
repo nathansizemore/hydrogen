@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::os::unix::io::RawFd;
 
 use ss::Stream;
-use slab::Slab;
+use simple_slab::Slab;
 
 /// The `EventHandler` trait allows for hydrogen event dispatching.
 ///
@@ -23,7 +23,7 @@ pub trait EventHandler {
 }
 
 /// Internal list of all currently connected streams
-pub type StreamList = Arc<Mutex<Slab<Stream, usize>>>;
+pub type SlabMutex = Arc<Mutex<Slab<Stream>>>;
 
 /// Used as a strongly typed wrapper for passing around a `*mut EventHandler`
 pub struct Handler(pub *mut EventHandler);

@@ -11,12 +11,11 @@ extern crate log;
 extern crate time;
 extern crate libc;
 extern crate rand;
-extern crate slab;
 extern crate epoll;
-extern crate errno;
 extern crate openssl;
 extern crate num_cpus;
 extern crate threadpool;
+extern crate simple_slab;
 extern crate rustc_serialize;
 extern crate simple_stream as ss;
 
