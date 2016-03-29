@@ -281,7 +281,7 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, slab_mutex: SlabMutex, ha
 }
 
 fn try_find_stream_from_fd(slab_mutex: SlabMutex, fd: RawFd) -> Result<Stream, ()> {
-    trace!("try_find_stream_from_fd");
+    trace!("try_find_stream_from_fd ");
 
     let mut guard = match slab_mutex.lock() {
         Ok(g) => g,
@@ -291,25 +291,26 @@ fn try_find_stream_from_fd(slab_mutex: SlabMutex, fd: RawFd) -> Result<Stream, (
 
     trace!("===== SlabMutex =====");
     trace!("slab.len: {}", slab.len());
+    for x in 0..slab.len() {
+        match slab[x] {
+            Some(ref stream) => trace!("slab[{}]: {}", x, stream.as_raw_fd()),
+            None => trace!("slab[{}]: None", x)
+        };
+    }
+    trace!("======================");
 
     let mut offset = 0;
     let mut found = false;
     for x in 0..slab.len() {
         match slab[x] {
             Some(ref stream) => {
-                trace!("slab[{}]: {}", x, stream.as_raw_fd());
-
                 offset = x;
                 found = true;
                 break;
             }
-            None => {
-                trace!("slab[{}]: None", x);
-            }
+            None => { }
         }
     }
-
-    trace!("======================");
 
     if found {
         Ok(slab.remove(offset).unwrap())
