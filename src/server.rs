@@ -339,7 +339,7 @@ fn handle_read_event(epfd: RawFd, stream: Stream, slab_mutex: SlabMutex, handler
     let mut stream = stream;
     let recv_result = stream.recv();
     if recv_result.is_err() {
-        trace!("Error during recv (disconnect/eof/etc... not real error), closing fd");
+        trace!("Error during recv: {}", recv_result.unwrap_err());
 
         remove_fd_from_epoll(epfd, fd);
         close_fd(fd);
