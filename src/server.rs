@@ -148,12 +148,7 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, sl
     stats::fd_opened();
 
     let fd = tcp_stream.into_raw_fd();
-    let mut socket = Socket::new(fd);
-    let opt_set_result = setup_new_socket(&mut socket);
-    if opt_set_result.is_err() {
-        close_fd(fd);
-        return;
-    }
+    let socket = Socket::new(fd);
 
     // Setup our stream
     let stream = match config.ssl {
@@ -181,12 +176,12 @@ fn handle_new_connection(tcp_stream: TcpStream, config: &Config, epfd: RawFd, sl
     // Options are set _after_ the stream is configured for a less error prone
     // OpenSSL handshake process.
     {
-        // let mut opt_socket = Socket::new(fd);
-        // let opt_set_result = setup_new_socket(&mut opt_socket);
-        // if opt_set_result.is_err() {
-        //     close_fd(fd);
-        //     return;
-        // }
+        let mut opt_socket = Socket::new(fd);
+        let opt_set_result = setup_new_socket(&mut opt_socket);
+        if opt_set_result.is_err() {
+            close_fd(fd);
+            return;
+        }
     }
 
     // Add stream to our server
@@ -286,29 +281,17 @@ fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, slab_mutex: SlabMutex, ha
 }
 
 fn try_find_stream_from_fd(slab_mutex: SlabMutex, fd: RawFd) -> Result<Stream, ()> {
-    trace!("try_find_stream_from_fd ");
-
     let mut guard = match slab_mutex.lock() {
         Ok(g) => g,
         Err(p) => p.into_inner()
     };
     let slab = guard.deref_mut();
 
-    trace!("===== SlabMutex =====");
-    trace!("slab.len: {}", slab.len());
-    for x in 0..slab.len() {
-        match slab[x] {
-            Some(ref stream) => trace!("slab[{}]: {}", x, stream.as_raw_fd()),
-            None => trace!("slab[{}]: None", x)
-        };
-    }
-    trace!("======================");
-
     let mut offset = 0;
     let mut found = false;
     for x in 0..slab.len() {
         match slab[x] {
-            Some(ref stream) => {
+            Some(_) => {
                 offset = x;
                 found = true;
                 break;
@@ -354,6 +337,9 @@ fn handle_read_event(epfd: RawFd, stream: Stream, slab_mutex: SlabMutex, handler
     }
 
     let mut msg_queue = stream.drain_rx_queue();
+
+    trace!("fd: {} rx_queue.len: {}", fd, msg_queue.len());
+
     for msg in msg_queue.drain(..) {
         let s = stream.clone();
         let sm = slab_mutex.clone();
