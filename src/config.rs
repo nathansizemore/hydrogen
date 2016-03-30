@@ -7,13 +7,21 @@
 
 
 use openssl::ssl::SslContext;
-use log::LogLevelFilter;
 
 
 pub struct Config {
+    /// Address to bind to
     pub addr: String,
+    /// Port to bind to
     pub port: u16,
-    pub workers: usize,
+    /// OpenSSL conext to use for new connections
     pub ssl: Option<SslContext>,
-    pub log_level: LogLevelFilter,
+    /// The maximum number of threads available to hydrogen
+    /// not including the two needed for new connection handling
+    /// and main event loop.
+    pub max_threads: usize,
+    /// The amount of pre-allocated slab space for connections.
+    /// This should be, roughly, the maximum amount of concurrent
+    /// connections expected.
+    pub pre_allocated: usize
 }
