@@ -85,14 +85,21 @@ struct Connection {
     /// Current I/O state for socket.
     state: Mutex<IoState>,
     /// Socket (Stream implemented trait-object).
-    stream: Stream
+    stream: UnsafeCell<Stream>
 }
-
 unsafe impl Send for Connection {}
 unsafe impl Sync for Connection {}
 
+
+struct MutSlab {
+    inner: UnsafeCell<Slab<Arc<Connection>>>
+}
+unsafe impl Send for MutSlab {}
+unsafe impl Sync for MutSlab {}
+
+
 /// Memory region for all concurrent connections.
-type ConnectionSlab = Arc<UnsafeCell<Slab<Arc<UnsafeCell<Connection>>>>>;
+type ConnectionSlab = Arc<MutSlab>;
 
 /// Protected memory region for newly accepted connections.
 type NewConnectionSlab = Arc<Mutex<Slab<Connection>>>;
@@ -100,21 +107,26 @@ type NewConnectionSlab = Arc<Mutex<Slab<Connection>>>;
 
 /// Starts the server with the passed config options
 pub fn begin(cfg: Config, event_handler: Box<EventHandler>) {
-    // Wrap handler in something we can share between threads
-    let handler = Handler(Box::into_raw(event_handler));
+    // // Wrap handler in something we can share between threads
+    // let handler = Handler(Box::into_raw(event_handler));
+    //
+    // // Create our new connections slab
+    // let new_connection_slab = Arc::new(Mutex::new(Slab::<Connection>::new(10)));
+    //
+    // // Create our connection slab
+    // let slab = Slab::<Arc<UnsafeCell<Connection>>>::new(cfg.pre_allocated);
+    // let connection_slab = Arc::new(UnsafeCell::new(slab));
+    //
+    // // Start the event loop
+    // let threads = cfg.max_threads;
+    // let handler_clone = handler.clone();
+    // let new_connections = new_connection_slab.clone();
+    // thread::Builder::new()
+    //     .name("Event Loop".to_string())
+    //     .spawn(move || { event_loop(new_connections, connection_slab, handler_clone, threads) })
+    //     .unwrap();
 
-    // Create our connection slab
-    let slab = Slab::<Arc<UnsafeCell<Connection>>>::new(cfg.pre_allocated);
-    let connection_slab = Arc::new(UnsafeCell::new(slab));
 
-
-
-    // Start the event loop
-    //
-    //
-    //
-    //
-    //
     // // Create an epoll instance
     // let epoll_create_result = epoll::create1(0);
     // if epoll_create_result.is_err() {
@@ -175,27 +187,26 @@ fn event_loop(new_connections: NewConnectionSlab,
 
     loop {
         unsafe {
-            // Remove any connections in the IoState::ShouldClose state.
-            remove_stale_connections(&connection_slab, &thread_pool, &handler);
-
-            // Insert any newly received connections into the connection_slab
-            insert_new_connections(&new_connections, &connection_slab);
-
-            // Adjust states/re-arm connections before going back into epoll_wait
-            prepare_connections_for_epoll_wait(epfd, &connection_slab);
+            // // Remove any connections in the IoState::ShouldClose state.
+            // remove_stale_connections(&connection_slab, &thread_pool, &handler);
+            //
+            // // Insert any newly received connections into the connection_slab
+            // insert_new_connections(&new_connections, &connection_slab);
+            //
+            // // Adjust states/re-arm connections before going back into epoll_wait
+            // prepare_connections_for_epoll_wait(epfd, &connection_slab);
+            //
+            // // Check for any new events
+            // match epoll::wait(epfd, &mut event_buffer[..], MAX_WAIT) {
+            //     Ok(num_events) => {
+            //         update_io_events(&connection_slab, &event_buffer[0..num_events]);
+            //     }
+            //     Err(e) => {
+            //         error!("During epoll::wait(): {}", e);
+            //         panic!()
+            //     }
+            // };
         }
-
-        match epoll::wait(epfd, &mut event_buffer[..], MAX_WAIT) {
-            Ok(num_events) => {
-                // for x in 0..num_events as usize {
-                //     handle_epoll_event(epfd, &events[x], slab_mutex.clone(), handler.clone());
-                // }
-            }
-            Err(e) => {
-                error!("During epoll::wait(): {}", e);
-                panic!()
-            }
-        };
     }
 }
 
@@ -205,7 +216,7 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
                                    thread_pool: &ThreadPool,
                                    handler: &Handler)
 {
-    let slab_ptr = connection_slab.get();
+    let slab_ptr = (*connection_slab).inner.get();
     let max_removals = (*slab_ptr).len();
     let mut offsets = Vec::<usize>::with_capacity(max_removals);
 
@@ -254,8 +265,8 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 }
 
 /// Closes the connection's underlying file descriptor
-unsafe fn close_connection(connection_ptr: *mut Connection) {
-    let fd = (*connection_ptr).fd;
+unsafe fn close_connection(connection: Arc<Connection>) {
+    let fd = connection.fd;
     let result = libc::close(fd);
     if result < 0 {
         let err = Error::from_raw_os_error(result as i32);
@@ -281,82 +292,160 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
     }
 }
 
-/// Traverses the "main" connection_slab looking for connections in IoState::New or IoState::ReArm
-/// It then either adds the new connection to epoll's interest list, or re-arms the fd with a
-/// new event mask.
-unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab)
-{
-    // Unwrap/dereference our Slab from Arc<Unsafe<T>>
-    let slab_ptr = connection_slab.get();
+// /// Traverses the "main" connection_slab looking for connections in IoState::New or IoState::ReArm
+// /// It then either adds the new connection to epoll's interest list, or re-arms the fd with a
+// /// new event mask.
+// unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab)
+// {
+//     // Unwrap/dereference our Slab from Arc<Unsafe<T>>
+//     let slab_ptr = connection_slab.get();
+//
+//     // Iterate over our connections and add them to epoll if they are new,
+//     // or re-arm them epoll if they are finished with I/O operations
+//     for arc_connection in (*slab_ptr).iter_mut() {
+//         let connection_ptr = arc_connection.get();
+//
+//         let mut guard = match (*connection_ptr).state.lock() {
+//             Ok(g) => g,
+//             Err(p) => p.into_inner()
+//         };
+//
+//         let mut io_state = guard.deref_mut();
+//         if *io_state == IoState::New {
+//             add_connection_to_epoll(epfd, connection_ptr);
+//             *io_state = IoState::Waiting;
+//         } else if *io_state == IoState::ReArm {
+//             rearm_connection_in_epoll(epfd, connection_ptr);
+//             *io_state = IoState::Waiting;
+//         }
+//     }
+// }
 
-    // Iterate over our connections and add them to epoll if they are new,
-    // or re-arm them epoll if they are finished with I/O operations
-    for arc_connection in (*slab_ptr).iter_mut() {
-        let connection_ptr = arc_connection.get();
+// /// Adds a new connection to the epoll interest list.
+// unsafe fn add_connection_to_epoll(epfd: RawFd, connection_ptr: *mut Connection) {
+//     let fd = (*connection_ptr).fd;
+//     let _ = epoll::ctl(epfd,
+//                        ctl_op::ADD,
+//                        fd,
+//                        &mut EpollEvent { data: fd as u64, events: EVENTS })
+//         .map_err(|e| {
+//             error!("epoll::CtrlError during add: {}", e);
+//
+//             // Update state to IoEvent::ShouldClose
+//             let mut guard = match (*connection_ptr).event.lock() {
+//                 Ok(g) => g,
+//                 Err(p) => p.into_inner()
+//             };
+//             let mut event_state = guard.deref_mut();
+//             *event_state = IoEvent::ShouldClose;
+//         });
+// }
 
-        let mut guard = match (*connection_ptr).state.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner()
-        };
-
-        let mut io_state = guard.deref_mut();
-        if *io_state == IoState::New {
-            add_connection_to_epoll(epfd, connection_ptr);
-            *io_state = IoState::Waiting;
-        } else if *io_state == IoState::ReArm {
-            rearm_connection_in_epoll(epfd, connection_ptr);
-            *io_state = IoState::Waiting;
-        }
-    }
-}
-
-/// Adds a new connection to the epoll interest list.
-unsafe fn add_connection_to_epoll(epfd: RawFd, connection_ptr: *mut Connection) {
-    let fd = (*connection_ptr).fd;
-    let _ = epoll::ctl(epfd,
-                       ctl_op::ADD,
-                       fd,
-                       &mut EpollEvent { data: fd as u64, events: EVENTS })
-        .map_err(|e| {
-            error!("epoll::CtrlError during add: {}", e);
-
-            // Update state to IoEvent::ShouldClose
-            let mut guard = match (*connection_ptr).event.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-            let mut event_state = guard.deref_mut();
-            *event_state = IoEvent::ShouldClose;
-        });
-}
-
-/// Re-arms a connection in the epoll interest list with the event mask.
-unsafe fn rearm_connection_in_epoll(epfd: RawFd, connection_ptr: *mut Connection) {
-    let fd = (*connection_ptr).fd;
-    let _ = epoll::ctl(epfd,
-                       ctl_op::MOD,
-                       fd,
-                       &mut EpollEvent { data: fd as u64, events: EVENTS })
-        .map_err(|e| {
-            error!("epoll::CtrlError during mod: {}", e);
-
-            // Update state to IoEvent::ShouldClose
-            let mut guard = match (*connection_ptr).event.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-            let mut event_state = guard.deref_mut();
-            *event_state = IoEvent::ShouldClose;
-        });
-}
-
-
+// /// Re-arms a connection in the epoll interest list with the event mask.
+// unsafe fn rearm_connection_in_epoll(epfd: RawFd, connection_ptr: *mut Connection) {
+//     let fd = (*connection_ptr).fd;
+//     let _ = epoll::ctl(epfd,
+//                        ctl_op::MOD,
+//                        fd,
+//                        &mut EpollEvent { data: fd as u64, events: EVENTS })
+//         .map_err(|e| {
+//             error!("epoll::CtrlError during mod: {}", e);
+//
+//             // Update state to IoEvent::ShouldClose
+//             let mut guard = match (*connection_ptr).event.lock() {
+//                 Ok(g) => g,
+//                 Err(p) => p.into_inner()
+//             };
+//             let mut event_state = guard.deref_mut();
+//             *event_state = IoEvent::ShouldClose;
+//         });
+// }
 
 
+// unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[EpollEvent]) {
+//     const READ_EVENT: u32 = event_type::EPOLLIN;
+//
+//     for event in events.iter() {
+//         // Locate the connection this event is for
+//         let fd = event.data as RawFd;
+//         let find_result = find_connection_from_fd(fd, connection_slab);
+//         if find_result.is_err() {
+//             error!("Finding fd: {} in connection_slab", fd);
+//             continue;
+//         }
+//
+//         // Unwrap our Connection from Arc<UnsafeCell<T>>
+//         let arc_connection = find_result.unwrap();
+//         let connection_ptr = arc_connection.get();
+//
+//         // Event type branch
+//         let data_available = (event.events & READ_EVENT) > 0;
+//
+//         // If we've properly handled race conditions correctly and state ordering,
+//         // the only thing we care about here are connections that are currently
+//         // in the IoEvent::Waiting state.
+//         let mut guard = match (*connection_ptr).event.lock() {
+//             Ok(g) => g,
+//             Err(p) => p.into_inner()
+//         };
+//
+//         let io_event = guard.deref_mut();
+//
+//         if data_available {
+//             if *io_event == IoEvent::Waiting {
+//                 *io_event = IoEvent::DataAvailable;
+//             }
+//         } else {
+//             *io_event = IoEvent::ShouldClose;
+//         }
+//     }
+// }
+
+// unsafe fn find_connection_from_fd(fd: RawFd,
+//                                   connection_slab: &ConnectionSlab)
+//                                   -> Result<Arc<UnsafeCell<Connection>>, ()>
+// {
+//     let slab_ptr = connection_slab.get();
+//     for arc_connection in (*slab_ptr).iter() {
+//         let connection_ptr = arc_connection.get();
+//         if (*connection_ptr).fd == fd {
+//             return Ok(arc_connection.clone());
+//         }
+//     }
+//
+//     Err(())
+// }
 
 
 
 
+
+// fn handle_epoll_event(epfd: RawFd, event: &EpollEvent, slab_mutex: SlabMutex, handler: Handler) {
+//     const READ_EVENT: u32 = event_type::EPOLLIN;
+//
+//     let fd = event.data as RawFd;
+//     let find_result = try_find_stream_from_fd(slab_mutex.clone(), fd);
+//     if find_result.is_err() {
+//         remove_fd_from_epoll(epfd, fd);
+//         close_fd(fd);
+//     }
+//
+//     let stream = find_result.unwrap();
+//     let read_event = (event.events & READ_EVENT) > 0;
+//     if read_event {
+//         handle_read_event(epfd, stream, slab_mutex, handler);
+//     } else {
+//         remove_fd_from_epoll(epfd, fd);
+//         close_fd(fd);
+//
+//         unsafe {
+//             (*thread_pool).execute(move || {
+//                 let Handler(ptr) = handler;
+//                 (*ptr).on_stream_closed(fd);
+//             });
+//         }
+//     }
+// }
 
 
 
@@ -544,10 +633,10 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, connection_ptr: *mut Connection
 //         close_fd(fd);
 //
 //         unsafe {
-            // (*thread_pool).execute(move || {
-            //     let Handler(ptr) = handler;
-            //     (*ptr).on_stream_closed(fd);
-            // });
+//             (*thread_pool).execute(move || {
+//                 let Handler(ptr) = handler;
+//                 (*ptr).on_stream_closed(fd);
+//             });
 //         }
 //     }
 // }
