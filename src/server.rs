@@ -366,9 +366,9 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
             add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         } else if *io_state == IoState::ReArm {
-            //rearm_connection_in_epoll(epfd, arc_connection);
-            remove_connection_from_epoll(epfd, arc_connection);
-            add_connection_to_epoll(epfd, arc_connection);
+            rearm_connection_in_epoll(epfd, arc_connection);
+            // remove_connection_from_epoll(epfd, arc_connection);
+            // add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         }
     }
