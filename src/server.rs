@@ -216,8 +216,8 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     // Attempt to create an epoll instance
     let result = libc::epoll_create(0);
     if result < 0 {
-        let err = Error::from_raw_os_error(result as i32);
-        error!("Error closing fd: {}", err);
+        let err = Error::from_raw_os_error(errno().0 as i32);
+        error!("Creating epoll instance: {}", err);
         panic!();
     }
 
@@ -253,7 +253,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
         // Check for any new events
         let result = libc::epoll_wait(epfd, event_buffer.as_mut_ptr(), MAX_EVENTS, MAX_WAIT);
         if result < 0 {
-            let err = Error::from_raw_os_error(result as i32);
+            let err = Error::from_raw_os_error(errno().0 as i32);
             error!("During epoll_wait: {}", err);
             panic!();
         }
@@ -322,7 +322,7 @@ unsafe fn close_connection(connection: &Arc<Connection>) {
 
     let result = libc::close(fd);
     if result < 0 {
-        let err = Error::from_raw_os_error(result as i32);
+        let err = Error::from_raw_os_error(errno().0 as i32);
         error!("Error closing fd: {}", err);
     }
 }
