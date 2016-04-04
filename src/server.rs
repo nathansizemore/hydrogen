@@ -601,4 +601,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
         (*handler_ptr).on_data_received(stream, msg);
     }
     trace!("Message queue processed");
+
+    let wait_interval = Duration::new(10, 0);
+    thread::sleep(wait_interval);
 }
