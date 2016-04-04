@@ -214,7 +214,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     const MAX_WAIT: i32 = 100; // Milliseconds
 
     // Attempt to create an epoll instance
-    let result = libc::epoll_create(0);
+    let result = libc::epoll_create(1);
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
         error!("Creating epoll instance: {}", err);
