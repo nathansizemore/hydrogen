@@ -237,8 +237,8 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
         .unwrap();
 
     // Scratch space for epoll returned events
-    let mut event_buffer = Vec::<libc::epoll_event>::with_capacity(MAX_EVENTS);
-    event_buffer.set_len(MAX_EVENTS);
+    let mut event_buffer = Vec::<libc::epoll_event>::with_capacity(MAX_EVENTS as usize);
+    event_buffer.set_len(MAX_EVENTS as usize);
 
     loop {
         // Remove any connections in the IoState::ShouldClose state.
@@ -258,7 +258,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
             panic!();
         }
 
-        let num_events = result;
+        let num_events = result as usize;
         update_io_events(&connection_slab, &event_buffer[0..num_events]);
     }
 }
