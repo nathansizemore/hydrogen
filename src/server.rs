@@ -545,7 +545,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
         };
 
         let event_state = guard.deref_mut();
-        *event_state == IoEvent::ShouldClose;
+        *event_state = IoEvent::ShouldClose;
         return;
     }
 
