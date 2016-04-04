@@ -173,8 +173,6 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConn
     // Take ownership of tcp_stream's underlying file descriptor
     let fd = tcp_stream.into_raw_fd();
 
-    trace!("New connection with fd: {}", fd);
-
     // Create a socket and set various options
     let mut socket = Socket::new(fd);
     let _ = socket.set_nonblocking();
@@ -318,8 +316,6 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 unsafe fn close_connection(connection: &Arc<Connection>) {
     let fd = (*connection).fd;
 
-    trace!("Closing fd: {}", fd);
-
     let result = libc::close(fd);
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
@@ -350,8 +346,6 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
 /// new event mask.
 unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab)
 {
-    trace!("prepare_connections_for_epoll_wait loop");
-
     // Unwrap/dereference our Slab from Arc<Unsafe<T>>
     let slab_ptr = (*connection_slab).inner.get();
 
@@ -368,22 +362,14 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
         let stream_ptr = (*arc_connection).stream.get();
         let fd = (*stream_ptr).as_raw_fd();
 
-        trace!("===");
-        trace!("fd: {}", fd);
         if *io_state == IoState::New {
-            trace!("IoState::New");
             add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         } else if *io_state == IoState::ReArm {
-            trace!("IoState::ReArm");
             rearm_connection_in_epoll(epfd, arc_connection);
             // remove_connection_from_epoll(epfd, arc_connection);
             // add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
-        } else if *io_state == IoState::Waiting {
-            trace!("IoState::Waiting");
-        } else if *io_state == IoState::InUse {
-            trace!("IoState::InUse");
         }
     }
 }
@@ -391,9 +377,6 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
 /// Adds a new connection to the epoll interest list.
 unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
-
-    trace!("Adding to epoll fd: {}", fd);
-
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_ADD,
                        fd,
@@ -416,9 +399,6 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
-
-    trace!("Re-arming in epoll fd: {}", fd);
-
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
                        fd,
@@ -441,9 +421,6 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
 /// Removes a connection in the epoll interest list.
 unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
-
-    trace!("Removing from epoll fd: {}", fd);
-
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_DEL,
                        fd,
@@ -462,9 +439,6 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[libc::epo
     for event in events.iter() {
         // Locate the connection this event is for
         let fd = event.u64 as RawFd;
-
-        trace!("I/O event for fd: {}", fd);
-
         let find_result = find_connection_from_fd(fd, connection_slab);
         if find_result.is_err() {
             error!("Finding fd: {} in connection_slab", fd);
@@ -514,9 +488,8 @@ unsafe fn find_connection_from_fd(fd: RawFd,
 unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: Handler) {
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
-    // let _100ms = 1000000 * 100;
-    // let wait_interval = Duration::new(0, _100ms);
-    let wait_interval = Duration::new(1, 0);
+    let _100ms = 1000000 * 100;
+    let wait_interval = Duration::new(0, _100ms);
 
     loop {
         thread::sleep(wait_interval);
@@ -558,8 +531,6 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
     // Get a pointer into UnsafeCell<Stream>
     let stream_ptr = (*arc_connection).stream.get();
 
-    trace!("Read event for fd: {}", (*stream_ptr).as_raw_fd());
-
     // Attempt recv
     let recv_result = (*stream_ptr).recv();
     if recv_result.is_err() {
@@ -580,15 +551,13 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
 
     // Update the state so that the next iteration over the ConnectionSlab
     // will re-arm this connection in epoll
-    trace!("Updating state to IoState::ReArm");
-
     let mut guard = match (*arc_connection).state.lock() {
         Ok(g) => g,
         Err(p) => p.into_inner()
     };
 
     let io_state = guard.deref_mut();
-    *io_state == IoState::ReArm;
+    *io_state = IoState::ReArm;
 
     // Grab the queue of all messages received during the last call
     let mut msg_queue = (*stream_ptr).drain_rx_queue();
@@ -600,8 +569,4 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
 
         (*handler_ptr).on_data_received(stream, msg);
     }
-    trace!("Message queue processed");
-
-    let wait_interval = Duration::new(10, 0);
-    thread::sleep(wait_interval);
 }
