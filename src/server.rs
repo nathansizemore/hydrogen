@@ -362,10 +362,18 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
         };
 
         let mut io_state = guard.deref_mut();
+
+        let fd = (arc_connection).stream.as_raw_fd();
+
+        trace!("===");
+        trace!("prepare_connections_for_epoll_wait loop");
+        trace!("fd: {}", fd);
         if *io_state == IoState::New {
+            trace!("IoState::New");
             add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         } else if *io_state == IoState::ReArm {
+            trace!("IoState::ReArm");
             rearm_connection_in_epoll(epfd, arc_connection);
             // remove_connection_from_epoll(epfd, arc_connection);
             // add_connection_to_epoll(epfd, arc_connection);
@@ -565,6 +573,8 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
 
     // Update the state so that the next iteration over the ConnectionSlab
     // will re-arm this connection in epoll
+    trace!("Updating state to IoState::ReArm");
+
     let mut guard = match (*arc_connection).state.lock() {
         Ok(g) => g,
         Err(p) => p.into_inner()
@@ -583,4 +593,5 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
 
         (*handler_ptr).on_data_received(stream, msg);
     }
+    trace!("Message queue processed");
 }
