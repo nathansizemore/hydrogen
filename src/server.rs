@@ -44,7 +44,7 @@ static mut ssl_context: *mut SslContext = 0 as *mut SslContext;
 // EPOLLONESHOT     - After an event is pulled out with epoll_wait(2) the associated
 //                    file descriptor is internally disabled and no other events will
 //                    be reported by the epoll interface.
-const EVENTS: u32 = libc::EPOLLIN |
+const EVENTS: i32 = libc::EPOLLIN |
                     libc::EPOLLRDHUP |
                     libc::EPOLLPRI |
                     libc::EPOLLET |
