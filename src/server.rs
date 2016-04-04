@@ -377,6 +377,9 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
 /// Adds a new connection to the epoll interest list.
 unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
+
+    trace!("Adding to epoll fd: {}", fd);
+
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_ADD,
                        fd,
@@ -399,6 +402,9 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
+
+    trace!("Re-arming in epoll fd: {}", fd);
+
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
                        fd,
@@ -421,6 +427,9 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
 /// Removes a connection in the epoll interest list.
 unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
+
+    trace!("Removing from epoll fd: {}", fd);
+
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_DEL,
                        fd,
