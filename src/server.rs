@@ -7,7 +7,7 @@
 
 
 use std::thread;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::time::Duration;
 use std::ops::{Deref, DerefMut};
 use std::cell::UnsafeCell;
@@ -49,7 +49,6 @@ const EVENTS: i32 = libc::EPOLLIN |
                     libc::EPOLLPRI |
                     libc::EPOLLET |
                     libc::EPOLLONESHOT;
-
 
 
 #[derive(Clone, PartialEq, Eq)]
@@ -535,7 +534,15 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
     let recv_result = (*stream_ptr).recv();
     if recv_result.is_err() {
         let err = recv_result.unwrap_err();
-        error!("During recv: {}", err);
+        let kind = err.kind();
+
+        if kind != ErrorKind::UnexpectedEof
+            && kind != ErrorKind::ConnectionReset
+            && kind != ErrorKind::ConnectionAborted
+            && kind != ErrorKind::WouldBlock
+        {
+            error!("During recv: {}", err);
+        }
 
         // Update the state so that the next iteration over the ConnectionSlab
         // will remove this connection.
