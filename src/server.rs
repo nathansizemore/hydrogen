@@ -380,7 +380,7 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_ADD,
                        fd,
-                       &mut libc::epoll_event { events: EVENTS, u64: fd });
+                       &mut libc::epoll_event { events: EVENTS as u32, u64: fd as u64 });
 
    if result < 0 {
        let err = Error::from_raw_os_error(errno().0 as i32);
@@ -402,7 +402,7 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
                        fd,
-                       &mut libc::epoll_event { events: EVENTS, u64: fd });
+                       &mut libc::epoll_event { events: EVENTS as u32, u64: fd as u64 });
 
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
@@ -424,7 +424,7 @@ unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connect
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_DEL,
                        fd,
-                       &mut libc::epoll_event { events: EVENTS, u64: fd });
+                       &mut libc::epoll_event { events: EVENTS as u32, u64: fd as u64 });
 
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
