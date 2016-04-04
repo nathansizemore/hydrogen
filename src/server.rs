@@ -363,7 +363,8 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
 
         let mut io_state = guard.deref_mut();
 
-        let fd = (arc_connection).stream.as_raw_fd();
+        let stream_ptr = (*arc_connection).stream.get();
+        let fd = (*stream_ptr).as_raw_fd();
 
         trace!("===");
         trace!("prepare_connections_for_epoll_wait loop");
