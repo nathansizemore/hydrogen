@@ -438,7 +438,7 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[libc::epo
 
     for event in events.iter() {
         // Locate the connection this event is for
-        let fd = event.data as RawFd;
+        let fd = event.u64 as RawFd;
 
         trace!("I/O event for fd: {}", fd);
 
