@@ -434,7 +434,7 @@ unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connect
 
 /// Traverses the ConnectionSlab and updates any connection's state reported changed by epoll.
 unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[libc::epoll_event]) {
-    const READ_EVENT: u32 = libc::EPOLLIN;
+    const READ_EVENT: i32 = libc::EPOLLIN;
 
     for event in events.iter() {
         // Locate the connection this event is for
