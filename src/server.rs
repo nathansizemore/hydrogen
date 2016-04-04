@@ -16,6 +16,7 @@ use std::net::{TcpStream, TcpListener};
 use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 
 use libc;
+use errno::errno;
 use threadpool::ThreadPool;
 use openssl::ssl::{SslStream, SslContext};
 use ss::nonblocking::plain::Plain;
@@ -213,15 +214,15 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     const MAX_WAIT: i32 = 100; // Milliseconds
 
     // Attempt to create an epoll instance
-    let epoll_create_result = epoll_create(0);
-    if epoll_create_result.is_err() {
-        let err = epoll_create_result.unwrap_err();
-        error!("Creating epoll instance: {}", err);
-        return;
+    let result = libc::epoll_create(0);
+    if result < 0 {
+        let err = Error::from_raw_os_error(result as i32);
+        error!("Error closing fd: {}", err);
+        panic!();
     }
 
     // Epoll instance
-    let epfd = epoll_create_result.unwrap();
+    let epfd = result;
 
     // ThreadPool with user specified number of threads
     let thread_pool = ThreadPool::new(threads);
@@ -432,7 +433,7 @@ unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connect
 }
 
 /// Traverses the ConnectionSlab and updates any connection's state reported changed by epoll.
-unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[EpollEvent]) {
+unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[libc::epoll_event]) {
     const READ_EVENT: u32 = libc::EPOLLIN;
 
     for event in events.iter() {
