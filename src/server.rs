@@ -251,7 +251,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
         prepare_connections_for_epoll_wait(epfd, &connection_slab);
 
         // Check for any new events
-        match libc::epoll_wait(epfd, &mut event_buffer[..], MAX_EVENTS, MAX_WAIT) {
+        match libc::epoll_wait(epfd, event_buffer.as_mut_ptr(), MAX_EVENTS, MAX_WAIT) {
             Ok(num_events) => {
                 update_io_events(&connection_slab, &event_buffer[0..num_events]);
             }
