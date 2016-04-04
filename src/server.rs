@@ -350,6 +350,8 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
 /// new event mask.
 unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab)
 {
+    trace!("prepare_connections_for_epoll_wait loop");
+
     // Unwrap/dereference our Slab from Arc<Unsafe<T>>
     let slab_ptr = (*connection_slab).inner.get();
 
@@ -367,7 +369,6 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
         let fd = (*stream_ptr).as_raw_fd();
 
         trace!("===");
-        trace!("prepare_connections_for_epoll_wait loop");
         trace!("fd: {}", fd);
         if *io_state == IoState::New {
             trace!("IoState::New");
@@ -379,6 +380,10 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
             // remove_connection_from_epoll(epfd, arc_connection);
             // add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
+        } else if *io_state == IoState::Waiting {
+            trace!("IoState::Waiting");
+        } else if *io_state == IoState::InUse {
+            trace!("IoState::InUse");
         }
     }
 }
