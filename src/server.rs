@@ -211,7 +211,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
 {
     // Maximum number of events returned from epoll_wait
     const MAX_EVENTS: i32 = 100;
-    const MAX_WAIT: i32 = 100; // Milliseconds
+    const MAX_WAIT: i32 = 1000; // Milliseconds
 
     // Attempt to create an epoll instance
     let result = libc::epoll_create(1);
@@ -514,8 +514,9 @@ unsafe fn find_connection_from_fd(fd: RawFd,
 unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: Handler) {
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
-    let _100ms = 1000000 * 100;
-    let wait_interval = Duration::new(0, _100ms);
+    // let _100ms = 1000000 * 100;
+    // let wait_interval = Duration::new(0, _100ms);
+    let wait_interval = Duration::new(1, 0);
 
     loop {
         thread::sleep(wait_interval);
