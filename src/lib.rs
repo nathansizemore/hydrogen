@@ -11,7 +11,6 @@ extern crate log;
 extern crate time;
 extern crate libc;
 extern crate rand;
-extern crate epoll;
 extern crate openssl;
 extern crate num_cpus;
 extern crate threadpool;

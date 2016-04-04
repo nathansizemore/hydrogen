@@ -16,9 +16,6 @@ use std::net::{TcpStream, TcpListener};
 use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 
 use libc;
-use epoll;
-use epoll::util::*;
-use epoll::EpollEvent;
 use threadpool::ThreadPool;
 use openssl::ssl::{SslStream, SslContext};
 use ss::nonblocking::plain::Plain;
@@ -46,11 +43,11 @@ static mut ssl_context: *mut SslContext = 0 as *mut SslContext;
 // EPOLLONESHOT     - After an event is pulled out with epoll_wait(2) the associated
 //                    file descriptor is internally disabled and no other events will
 //                    be reported by the epoll interface.
-const EVENTS: u32 = event_type::EPOLLIN |
-                    event_type::EPOLLRDHUP |
-                    event_type::EPOLLPRI |
-                    event_type::EPOLLET |
-                    event_type::EPOLLONESHOT;
+const EVENTS: u32 = libc::EPOLLIN |
+                    libc::EPOLLRDHUP |
+                    libc::EPOLLPRI |
+                    libc::EPOLLET |
+                    libc::EPOLLONESHOT;
 
 
 
@@ -216,7 +213,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     const MAX_WAIT: i32 = 100; // Milliseconds
 
     // Attempt to create an epoll instance
-    let epoll_create_result = epoll::create1(0);
+    let epoll_create_result = epoll_create(0);
     if epoll_create_result.is_err() {
         let err = epoll_create_result.unwrap_err();
         error!("Creating epoll instance: {}", err);
@@ -239,7 +236,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
         .unwrap();
 
     // Scratch space for epoll returned events
-    let mut event_buffer = Vec::<EpollEvent>::with_capacity(MAX_EVENTS);
+    let mut event_buffer = Vec::<libc::epoll_event>::with_capacity(MAX_EVENTS);
     event_buffer.set_len(MAX_EVENTS);
 
     loop {
@@ -253,7 +250,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
         prepare_connections_for_epoll_wait(epfd, &connection_slab);
 
         // Check for any new events
-        match epoll::wait(epfd, &mut event_buffer[..], MAX_WAIT) {
+        match libc::epoll_wait(epfd, &mut event_buffer[..], MAX_WAIT) {
             Ok(num_events) => {
                 update_io_events(&connection_slab, &event_buffer[0..num_events]);
             }
@@ -379,56 +376,64 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
 /// Adds a new connection to the epoll interest list.
 unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
-    let _ = epoll::ctl(epfd,
-                       ctl_op::ADD,
+    let result = libc::epoll_ctl(epfd,
+                       libc::EPOLL_CTL_ADD,
                        fd,
-                       &mut EpollEvent { data: fd as u64, events: EVENTS })
-        .map_err(|e| {
-            error!("epoll::CtrlError during add: {}", e);
+                       &mut libc::epoll_event { events: EVENTS, u64: fd });
 
-            // Update state to IoEvent::ShouldClose
-            let mut guard = match (*arc_connection).event.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-            let mut event_state = guard.deref_mut();
-            *event_state = IoEvent::ShouldClose;
-        });
+   if result < 0 {
+       let err = Error::from_raw_os_error(errno().0 as i32);
+       error!("Adding fd to epoll: {}", err);
+
+       // Update state to IoEvent::ShouldClose
+       let mut guard = match (*arc_connection).event.lock() {
+           Ok(g) => g,
+           Err(p) => p.into_inner()
+       };
+       let mut event_state = guard.deref_mut();
+       *event_state = IoEvent::ShouldClose;
+   }
 }
 
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
-    let _ = epoll::ctl(epfd,
-                       ctl_op::MOD,
+    let result = libc::epoll_ctl(epfd,
+                       libc::EPOLL_CTL_MOD,
                        fd,
-                       &mut EpollEvent { data: fd as u64, events: EVENTS })
-        .map_err(|e| {
-            error!("epoll::CtrlError during mod: {}", e);
+                       &mut libc::epoll_event { events: EVENTS, u64: fd });
 
-            // Update state to IoEvent::ShouldClose
-            let mut guard = match (*arc_connection).event.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-            let mut event_state = guard.deref_mut();
-            *event_state = IoEvent::ShouldClose;
-        });
+    if result < 0 {
+        let err = Error::from_raw_os_error(errno().0 as i32);
+        error!("Re-arming fd in epoll: {}", err);
+
+        // Update state to IoEvent::ShouldClose
+        let mut guard = match (*arc_connection).event.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        };
+        let mut event_state = guard.deref_mut();
+        *event_state = IoEvent::ShouldClose;
+    }
 }
 
 /// Removes a connection in the epoll interest list.
 unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
-    let _ = epoll::ctl(epfd,
-                       ctl_op::DEL,
+    let result = libc::epoll_ctl(epfd,
+                       libc::EPOLL_CTL_DEL,
                        fd,
-                       &mut EpollEvent { data: fd as u64, events: EVENTS })
-        .map_err(|e| { error!("epoll::CtrlError during del: {}", e); });
+                       &mut libc::epoll_event { events: EVENTS, u64: fd });
+
+    if result < 0 {
+        let err = Error::from_raw_os_error(errno().0 as i32);
+        error!("Removing fd from epoll: {}", err);
+    }
 }
 
 /// Traverses the ConnectionSlab and updates any connection's state reported changed by epoll.
 unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[EpollEvent]) {
-    const READ_EVENT: u32 = event_type::EPOLLIN;
+    const READ_EVENT: u32 = libc::EPOLLIN;
 
     for event in events.iter() {
         // Locate the connection this event is for
