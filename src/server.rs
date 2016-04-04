@@ -368,7 +368,9 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
             add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         } else if *io_state == IoState::ReArm {
-            rearm_connection_in_epoll(epfd, arc_connection);
+            //rearm_connection_in_epoll(epfd, arc_connection);
+            remove_connection_from_epoll(epfd, arc_connection);
+            add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         }
     }
@@ -412,6 +414,16 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
             let mut event_state = guard.deref_mut();
             *event_state = IoEvent::ShouldClose;
         });
+}
+
+/// Removes a connection in the epoll interest list.
+unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
+    let fd = (*arc_connection).fd;
+    let _ = epoll::ctl(epfd,
+                       ctl_op::DEL,
+                       fd,
+                       &mut EpollEvent { data: fd as u64, events: EVENTS })
+        .map_err(|e| { error!("epoll::CtrlError during del: {}", e); });
 }
 
 /// Traverses the ConnectionSlab and updates any connection's state reported changed by epoll.
