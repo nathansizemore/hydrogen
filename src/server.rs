@@ -104,7 +104,7 @@ type Handler = Arc<MutHandler>;
 pub fn begin<T: EventHandler>(event_handler: T, cfg: Config) {
     // Wrap handler in something we can share between threads
     let arc_handler = Arc::new(MutHandler {
-        inner: UnsafeCell(event_handler)
+        inner: UnsafeCell::new(event_handler)
     });
 
     // Create our new connections slab
