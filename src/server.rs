@@ -264,7 +264,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
 /// then traverses that list, drops them, and informs the handler of client drop.
 unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
                                    thread_pool: &ThreadPool,
-                                   handler: &Handler)
+                                   handler: &EventHandler)
 {
     let slab_ptr = (*connection_slab).inner.get();
     let max_removals = (*slab_ptr).len();
