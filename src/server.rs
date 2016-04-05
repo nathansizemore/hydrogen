@@ -569,9 +569,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
     // Hand off the messages on to the consumer
     let queue = recv_result.unwrap();
     for msg in queue.drain(..) {
-        let stream = (*stream_ptr).clone();
-        let handler_ptr = handler.inner.get();
-
-        (*handler_ptr).on_data_received(stream, msg);
+        let EventHandler(ptr) = handler;
+        (*ptr).on_data_received((*stream_ptr), msg);
     }
 }
