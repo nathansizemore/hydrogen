@@ -120,7 +120,7 @@ pub fn begin<T: EventHandler>(event_handler: T, cfg: Config) {
         thread::Builder::new()
             .name("Event Loop".to_string())
             .spawn(move || {
-                event_loop(new_connections, connection_slab, handler_clone, threads)
+                event_loop(new_connections, connection_slab, handler, threads)
             })
             .unwrap();
     }
@@ -199,7 +199,7 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConn
 /// Main event loop
 unsafe fn event_loop(new_connections: NewConnectionSlab,
               connection_slab: ConnectionSlab,
-              handler: Handler,
+              handler: Arc<MutHandler>,
               threads: usize)
 {
     // Maximum number of events returned from epoll_wait
@@ -480,7 +480,7 @@ unsafe fn find_connection_from_fd(fd: RawFd,
     Err(())
 }
 
-unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: Handler) {
+unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: Arc<MutHandler>) {
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
     let _100ms = 1000000 * 100;
@@ -522,7 +522,7 @@ unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, 
     }
 }
 
-unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handler) {
+unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Arc<MutHandler>) {
     // Get a pointer into UnsafeCell<Stream>
     let stream_ptr = (*arc_connection).stream.get();
 
