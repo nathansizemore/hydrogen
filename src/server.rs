@@ -161,10 +161,10 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler
 }
 
 fn setup_listener_options(listener: &TcpListener) {
-    let fd = listener.as_raw_fd();
-    let mut socket = Socket::new(fd);
-
-    let _ = socket.set_reuseaddr(true);
+    // let fd = listener.as_raw_fd();
+    // let mut socket = Socket::new(fd);
+    //
+    // let _ = socket.set_reuseaddr(true);
 }
 
 unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab, handler: Handler) {
@@ -298,8 +298,8 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
         let fd = (*arc_connection).fd;
         let handler_clone = (*handler).clone();
         thread_pool.execute(move || {
-            let Handler(ptr) = handler_clone;
-            (*ptr).on_stream_closed(fd);
+            let ptr = handler_clone.inner.get();
+            (*ptr).on_connection_removed(fd);
         });
     }
 }

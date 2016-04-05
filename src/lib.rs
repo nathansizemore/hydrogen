@@ -36,6 +36,7 @@ pub trait EventHandler {
     fn on_new_connection(&mut self, fd: RawFd) -> Arc<UnsafeCell<Stream>>;
     fn on_data_received(&mut self, stream: Stream, buf: Vec<u8>);
     fn on_error(&mut self, err: Error);
+    fn on_connection_removed(&mut self, fd: RawFd);
 }
 
 
