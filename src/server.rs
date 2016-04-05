@@ -21,7 +21,7 @@ use threadpool::ThreadPool;
 use simple_slab::Slab;
 
 use config::Config;
-use super::{Stream, EventHandler};
+use super::{Stream, Handler};
 
 
 // When added to epoll, these will be the conditions of kernel notification:
@@ -64,11 +64,18 @@ enum IoState {
     ReArm
 }
 
-struct MutHandler {
-    inner: UnsafeCell<EventHandler>
+struct EventHandler(pub *mut Handler);
+unsafe impl Send for EventHandler {}
+unsafe impl Sync for EventHandler {}
+impl Clone for EventHandler {
+    fn clone(&self) -> EventHandler {
+        let EventHandler(ptr) = *self;
+        unsafe {
+            let same_location = &mut *ptr;
+            EventHandler(same_location)
+        }
+    }
 }
-unsafe impl Send for MutHandler {}
-unsafe impl Sync for MutHandler {}
 
 struct Connection {
     /// Underlying file descriptor.
@@ -97,18 +104,13 @@ type ConnectionSlab = Arc<MutSlab>;
 /// Protected memory region for newly accepted connections.
 type NewConnectionSlab = Arc<Mutex<Slab<Connection>>>;
 
-type Handler = Arc<MutHandler>;
 
-
-
-pub fn begin(event_handler: Box<EventHandler>, cfg: Config) {
+pub fn begin(handler: Box<Handler>, cfg: Config) {
     // Unwrap EventHandler
     let event_handler_ptr = Box::into_raw(event_handler);
 
     // Wrap handler in something we can share between threads
-    let arc_handler = Arc::new(MutHandler {
-        inner: UnsafeCell::new(*event_handler_ptr)
-    });
+    let event_handler = EventHandler(Box::into_raw(handler));
 
     // Create our new connections slab
     let new_connection_slab = Arc::new(Mutex::new(Slab::<Connection>::new(10)));
@@ -121,30 +123,30 @@ pub fn begin(event_handler: Box<EventHandler>, cfg: Config) {
 
     // Start the event loop
     let threads = cfg.max_threads;
-    let handler = arc_handler.clone();
+    let eh_clone = event_handler.clone();
     let new_connections = new_connection_slab.clone();
     unsafe {
         thread::Builder::new()
             .name("Event Loop".to_string())
             .spawn(move || {
-                event_loop(new_connections, connection_slab, handler, threads)
+                event_loop(new_connections, connection_slab, eh_clone, threads)
             })
             .unwrap();
     }
 
     // Start the TcpListener loop
-    let handler = arc_handler.clone();
+    let eh_clone = event_handler.clone();
     let listener_thread = unsafe {
         thread::Builder::new()
             .name("TcpListener Loop".to_string())
-            .spawn(move || { listener_loop(cfg, new_connection_slab, handler) })
+            .spawn(move || { listener_loop(cfg, new_connection_slab, eh_clone) })
             .unwrap()
     };
     let _ = listener_thread.join();
 
 }
 
-unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler: Handler) {
+unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler: EventHandler) {
     let listener_result = TcpListener::bind((&cfg.addr[..], cfg.port));
     if listener_result.is_err() {
         let err = listener_result.unwrap_err();
@@ -172,7 +174,7 @@ fn setup_listener_options(listener: &TcpListener) {
     // let _ = socket.set_reuseaddr(true);
 }
 
-unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab, handler: Handler) {
+unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab, handler: EventHandler) {
     // Take ownership of tcp_stream's underlying file descriptor
     let fd = tcp_stream.into_raw_fd();
 
@@ -201,7 +203,7 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConn
 /// Main event loop
 unsafe fn event_loop(new_connections: NewConnectionSlab,
               connection_slab: ConnectionSlab,
-              handler: Handler,
+              handler: EventHandler,
               threads: usize)
 {
     // Maximum number of events returned from epoll_wait
@@ -482,7 +484,7 @@ unsafe fn find_connection_from_fd(fd: RawFd,
     Err(())
 }
 
-unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: Handler) {
+unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: EventHandler) {
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
     let _100ms = 1000000 * 100;
@@ -524,7 +526,7 @@ unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, 
     }
 }
 
-unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handler) {
+unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventHandler) {
     // Get a pointer into UnsafeCell<Stream>
     let stream_ptr = (*arc_connection).stream.get();
 
