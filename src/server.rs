@@ -126,17 +126,18 @@ pub fn begin<T: EventHandler>(event_handler: T, cfg: Config) {
     }
 
     // Start the TcpListener loop
+    let handler = arc_handler.clone();
     let listener_thread = unsafe {
         thread::Builder::new()
             .name("TcpListener Loop".to_string())
-            .spawn(move || { listener_loop(cfg, new_connection_slab) })
+            .spawn(move || { listener_loop(cfg, new_connection_slab, handler) })
             .unwrap()
     };
     let _ = listener_thread.join();
 
 }
 
-unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab) {
+unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler: Handler) {
     let listener_result = TcpListener::bind((&cfg.addr[..], cfg.port));
     if listener_result.is_err() {
         let err = listener_result.unwrap_err();
@@ -149,7 +150,7 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab) {
 
     for accept_attempt in listener.incoming() {
         match accept_attempt {
-            Ok(tcp_stream) => handle_new_connection(tcp_stream, &new_connections),
+            Ok(tcp_stream) => handle_new_connection(tcp_stream, &new_connections, handler.clone()),
             Err(e) => error!("Accepting connection: {}", e)
         };
     }
@@ -164,26 +165,20 @@ fn setup_listener_options(listener: &TcpListener) {
     let _ = socket.set_reuseaddr(true);
 }
 
-unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab) {
+unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab, handler: Handler) {
     // Take ownership of tcp_stream's underlying file descriptor
     let fd = tcp_stream.into_raw_fd();
 
-    // Create a socket and set various options
-    let mut socket = Socket::new(fd);
-    let _ = socket.set_nonblocking();
-    let _ = socket.set_tcp_nodelay(true);
-    let _ = socket.set_keepalive(true);
-
-    // Create a "Plain Text" Stream
-    let plain_text = Plain::new(socket);
-    let stream = Stream::new(Box::new(plain_text));
+    // Execute EventHandler's constructor
+    let handler_ptr = handler.inner.get();
+    let stream = (*handler_ptr).on_new_connection(fd);
 
     // Create a connection structure
     let connection = Connection {
         fd: fd,
         event: Mutex::new(IoEvent::Waiting),
         state: Mutex::new(IoState::New),
-        stream: UnsafeCell::new(stream)
+        stream: stream
     };
 
     // Insert it into the NewConnectionSlab
