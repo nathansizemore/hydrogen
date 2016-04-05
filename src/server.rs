@@ -305,7 +305,7 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
         let fd = (*arc_connection).fd;
         let handler_clone = (*handler).clone();
         thread_pool.execute(move || {
-            let ptr = handler_clone.inner.get();
+            let EventHandler(ptr) = handler_clone;
             (*ptr).on_connection_removed(fd);
         });
     }
