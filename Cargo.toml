@@ -13,13 +13,7 @@ name = "hydrogen"
 
 [dependencies]
 log = "*"
-time = "*"
 libc = "*"
-rand = "*"
 errno = "*"
-openssl = "*"
-num_cpus = "*"
 threadpool = "*"
 simple-slab = "*"
-simple-stream = "*"
-rustc-serialize = "*"

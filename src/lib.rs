@@ -8,38 +8,35 @@
 
 #[macro_use]
 extern crate log;
-extern crate time;
 extern crate libc;
-extern crate rand;
 extern crate errno;
-extern crate openssl;
-extern crate num_cpus;
 extern crate threadpool;
 extern crate simple_slab;
-extern crate rustc_serialize;
-extern crate simple_stream as ss;
 
 
-use std::sync::Mutex;
-use types::*;
+use std::io::Error;
+use std::os::unix::io::{RawFd, AsRawFd};
+
+
 use config::Config;
 
-pub use ss::Stream;
-pub use ss::{SSend, StreamShutdown};
-
 pub mod config;
-pub mod types;
 
-mod stats;
 mod server;
 
 
-/// Starts the server using the passed `config` options.
-/// This is a blocking call for the life of the server.
-pub fn begin<T>(config: Config, handler: Box<T>)
-    where T: EventHandler + Send + Sync + 'static
-{
-    let mut data = Mutex::new(stats::Stats::new());
-    stats::init(&mut data);
-    server::begin(config, handler);
+pub trait Stream : AsRawFd + Send + Sync {
+    fn recv(&mut self) -> Result<Vec<Vec<u8>>, Error>;
+    fn send(&mut self, buf: &[u8]) -> Result<usize, Error>;
+}
+
+pub trait EventHandler {
+    fn on_new_connection(&mut self, fd: RawFd) -> Stream;
+    fn on_data_received(&mut self, stream: Stream, buf: Vec<u8>);
+    fn on_error(&mut self, err: Error);
+}
+
+
+pub fn begin<C: EventHandler>(handler: C, cfg: Config) {
+    server::begin(handler, cfg);
 }

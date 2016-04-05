@@ -6,16 +6,11 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use openssl::ssl::SslContext;
-
-
 pub struct Config {
     /// Address to bind to
     pub addr: String,
     /// Port to bind to
     pub port: u16,
-    /// OpenSSL conext to use for new connections
-    pub ssl: Option<SslContext>,
     /// The maximum number of threads available to hydrogen
     /// not including the two needed for new connection handling
     /// and main event loop.

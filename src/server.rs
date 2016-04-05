@@ -18,22 +18,11 @@ use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 use libc;
 use errno::errno;
 use threadpool::ThreadPool;
-use openssl::ssl::{SslStream, SslContext};
-use ss::nonblocking::plain::Plain;
-use ss::nonblocking::secure::Secure;
-use ss::{Socket, Stream, SRecv, SSend, TcpOptions, SocketOptions};
 use simple_slab::Slab;
 
-use stats;
-use types::*;
 use config::Config;
+use super::{Stream, EventHandler};
 
-
-// We need to be able to access our resource pool from several methods
-//static mut thread_pool: *mut ThreadPool = 0 as *mut ThreadPool;
-
-// SslContext
-static mut ssl_context: *mut SslContext = 0 as *mut SslContext;
 
 // When added to epoll, these will be the conditions of kernel notification:
 //
@@ -75,6 +64,12 @@ enum IoState {
     ReArm
 }
 
+struct MutHandler {
+    inner: UnsafeCell<EventHandler>
+}
+unsafe impl Send for MutHandler {}
+unsafe impl Sync for MutHandler {}
+
 struct Connection {
     /// Underlying file descriptor.
     fd: RawFd,
@@ -83,7 +78,7 @@ struct Connection {
     /// Current I/O state for socket.
     state: Mutex<IoState>,
     /// Socket (Stream implemented trait-object).
-    stream: UnsafeCell<Stream>
+    stream: Arc<UnsafeCell<Stream>>
 }
 unsafe impl Send for Connection {}
 unsafe impl Sync for Connection {}
@@ -103,10 +98,10 @@ type ConnectionSlab = Arc<MutSlab>;
 type NewConnectionSlab = Arc<Mutex<Slab<Connection>>>;
 
 
-/// Starts the server with the passed config options
-pub fn begin(cfg: Config, event_handler: Box<EventHandler>) {
+
+pub fn begin<T: EventHandler>(event_handler: T, cfg: Config) {
     // Wrap handler in something we can share between threads
-    let handler = Handler(Box::into_raw(event_handler));
+    let arc_handler = Arc::new(event_handler);
 
     // Create our new connections slab
     let new_connection_slab = Arc::new(Mutex::new(Slab::<Connection>::new(10)));
@@ -119,7 +114,7 @@ pub fn begin(cfg: Config, event_handler: Box<EventHandler>) {
 
     // Start the event loop
     let threads = cfg.max_threads;
-    let handler_clone = handler.clone();
+    let handler = arc_handler.clone();
     let new_connections = new_connection_slab.clone();
     unsafe {
         thread::Builder::new()
@@ -138,6 +133,7 @@ pub fn begin(cfg: Config, event_handler: Box<EventHandler>) {
             .unwrap()
     };
     let _ = listener_thread.join();
+
 }
 
 unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab) {
