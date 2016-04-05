@@ -107,7 +107,7 @@ type NewConnectionSlab = Arc<Mutex<Slab<Connection>>>;
 
 pub fn begin(handler: Box<Handler>, cfg: Config) {
     // Unwrap EventHandler
-    let event_handler_ptr = Box::into_raw(event_handler);
+    let event_handler_ptr = Box::into_raw(handler);
 
     // Wrap handler in something we can share between threads
     let event_handler = EventHandler(Box::into_raw(handler));

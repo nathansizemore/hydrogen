@@ -40,6 +40,8 @@ pub trait Handler {
 }
 
 
-pub fn begin<C: EventHandler>(handler: C, cfg: Config) {
+pub fn begin<T>(handler: Box<T>, cfg: Config)
+    where T: EventHandler + Send + Sync + 'static
+{
     server::begin(handler, cfg);
 }
