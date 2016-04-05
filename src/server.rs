@@ -97,6 +97,8 @@ type ConnectionSlab = Arc<MutSlab>;
 /// Protected memory region for newly accepted connections.
 type NewConnectionSlab = Arc<Mutex<Slab<Connection>>>;
 
+type Handler = Arc<MutHandler>;
+
 
 
 pub fn begin<T: EventHandler>(event_handler: T, cfg: Config) {
@@ -194,7 +196,7 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConn
 /// Main event loop
 unsafe fn event_loop(new_connections: NewConnectionSlab,
               connection_slab: ConnectionSlab,
-              handler: Arc<MutHandler>,
+              handler: Handler,
               threads: usize)
 {
     // Maximum number of events returned from epoll_wait
@@ -475,7 +477,7 @@ unsafe fn find_connection_from_fd(fd: RawFd,
     Err(())
 }
 
-unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: Arc<MutHandler>) {
+unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: Handler) {
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
     let _100ms = 1000000 * 100;
@@ -517,7 +519,7 @@ unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, 
     }
 }
 
-unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Arc<MutHandler>) {
+unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handler) {
     // Get a pointer into UnsafeCell<Stream>
     let stream_ptr = (*arc_connection).stream.get();
 
