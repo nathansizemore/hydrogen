@@ -179,7 +179,7 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConn
     let fd = tcp_stream.into_raw_fd();
 
     // Execute EventHandler's constructor
-    let handler_ptr = handler.inner.get();
+    let EventHandler(handler_ptr) = handler;
     let stream = (*handler_ptr).on_new_connection(fd);
 
     // Create a connection structure
