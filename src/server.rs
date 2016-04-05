@@ -567,6 +567,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
     let mut queue = recv_result.unwrap();
     for msg in queue.drain(..) {
         let EventHandler(ptr) = handler;
-        (*ptr).on_data_received((*stream_ptr), msg);
+        let arc_stream = (*arc_connection).stream.clone();
+        (*ptr).on_data_received(arc_stream, msg);
     }
 }
