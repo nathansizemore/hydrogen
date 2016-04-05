@@ -559,13 +559,11 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: Handle
     let io_state = guard.deref_mut();
     *io_state = IoState::ReArm;
 
-    // Grab the queue of all messages received during the last call
-    let mut msg_queue = (*stream_ptr).drain_rx_queue();
-    for msg in msg_queue.drain(..) {
+    // Hand off the messages on to the consumer
+    let queue = recv_result.unwrap();
+    for msg in queue.drain(..) {
         let stream = (*stream_ptr).clone();
-        let Handler(handler_ptr) = handler;
-
-        trace!("Consumer handoff: {}", String::from_utf8(msg.clone()).unwrap());
+        let handler_ptr = handler.inner.get();
 
         (*handler_ptr).on_data_received(stream, msg);
     }
