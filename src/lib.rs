@@ -17,6 +17,7 @@ extern crate simple_slab;
 use std::io::Error;
 use std::sync::Arc;
 use std::cell::UnsafeCell;
+use std::net::TcpListener;
 use std::os::unix::io::{RawFd, AsRawFd};
 
 
@@ -33,6 +34,7 @@ pub trait Stream : AsRawFd + Send + Sync {
 }
 
 pub trait Handler {
+    fn on_listener_created(&mut self, listener: &mut TcpListener);
     fn on_new_connection(&mut self, fd: RawFd) -> Arc<UnsafeCell<Stream>>;
     fn on_data_received(&mut self, stream: Arc<UnsafeCell<Stream>>, buf: Vec<u8>);
     fn on_error(&mut self, err: Error);
