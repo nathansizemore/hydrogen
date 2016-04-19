@@ -514,7 +514,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
 
     // Attempt recv
     match (*stream_ptr).recv() {
-        Ok(queue) => {
+        Ok(mut queue) => {
             // Update the state so that the next iteration over the ConnectionSlab
             // will re-arm this connection in epoll
             let mut guard = match (*arc_connection).state.lock() {
@@ -545,7 +545,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
 
                 let io_state = guard.deref_mut();
                 *io_state = IoState::ReArm;
-                
+
                 return;
             }
 
