@@ -9,7 +9,7 @@
 use std::thread;
 use std::io::{Error, ErrorKind};
 use std::time::Duration;
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use std::cell::UnsafeCell;
 use std::sync::{Arc, Mutex};
 use std::net::{TcpStream, TcpListener};
@@ -152,7 +152,7 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler
     }
 
     let listener = listener_result.unwrap();
-    setup_listener_options(&listener);
+    setup_listener_options(&listener, handler.clone());
 
     for accept_attempt in listener.incoming() {
         match accept_attempt {
@@ -164,11 +164,11 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler
     drop(listener);
 }
 
-fn setup_listener_options(listener: &TcpListener) {
-    // let fd = listener.as_raw_fd();
-    // let mut socket = Socket::new(fd);
-    //
-    // let _ = socket.set_reuseaddr(true);
+unsafe fn setup_listener_options(listener: &TcpListener, handler: EventHandler) {
+    let fd = listener.as_raw_fd();
+    let EventHandler(handler_ptr) = handler;
+
+    (*handler_ptr).on_server_created(fd);
 }
 
 unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab, handler: EventHandler) {
@@ -354,17 +354,11 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
         };
 
         let mut io_state = guard.deref_mut();
-
-        let stream_ptr = (*arc_connection).stream.get();
-        let fd = (*stream_ptr).as_raw_fd();
-
         if *io_state == IoState::New {
             add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         } else if *io_state == IoState::ReArm {
             rearm_connection_in_epoll(epfd, arc_connection);
-            // remove_connection_from_epoll(epfd, arc_connection);
-            // add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         }
     }
@@ -411,20 +405,6 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
         };
         let mut event_state = guard.deref_mut();
         *event_state = IoEvent::ShouldClose;
-    }
-}
-
-/// Removes a connection in the epoll interest list.
-unsafe fn remove_connection_from_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
-    let fd = (*arc_connection).fd;
-    let result = libc::epoll_ctl(epfd,
-                       libc::EPOLL_CTL_DEL,
-                       fd,
-                       &mut libc::epoll_event { events: EVENTS as u32, u64: fd as u64 });
-
-    if result < 0 {
-        let err = Error::from_raw_os_error(errno().0 as i32);
-        error!("Removing fd from epoll: {}", err);
     }
 }
 
