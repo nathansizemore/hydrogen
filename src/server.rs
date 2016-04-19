@@ -519,7 +519,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
         let kind = err.kind();
 
         trace!("Error during recv: {}", err);
-        trace!("ErrorKind: {}", kind);
+        trace!("ErrorKind: {:?}", kind);
 
         if kind != ErrorKind::UnexpectedEof
             && kind != ErrorKind::ConnectionReset
