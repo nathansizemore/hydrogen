@@ -513,49 +513,48 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
     let stream_ptr = (*arc_connection).stream.get();
 
     // Attempt recv
-    let recv_result = (*stream_ptr).recv();
-    if recv_result.is_err() {
-        let err = recv_result.unwrap_err();
-        let kind = err.kind();
+    match (*stream_ptr).recv() {
+        Ok(queue) => {
+            // Update the state so that the next iteration over the ConnectionSlab
+            // will re-arm this connection in epoll
+            let mut guard = match (*arc_connection).state.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner()
+            };
 
-        trace!("Error during recv: {}", err);
-        trace!("ErrorKind: {:?}", kind);
+            let io_state = guard.deref_mut();
+            *io_state = IoState::ReArm;
 
-        if kind != ErrorKind::UnexpectedEof
-            && kind != ErrorKind::ConnectionReset
-            && kind != ErrorKind::ConnectionAborted
-            && kind != ErrorKind::WouldBlock
-        {
-            error!("During recv: {}", err);
+            // Hand off the messages on to the consumer
+            for msg in queue.drain(..) {
+                let EventHandler(ptr) = handler;
+                let arc_stream = (*arc_connection).stream.clone();
+                (*ptr).on_data_received(arc_stream, msg);
+            }
         }
 
-        // Update the state so that the next iteration over the ConnectionSlab
-        // will remove this connection.
-        let mut guard = match (*arc_connection).event.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner()
-        };
+        Err(err) => {
+            let kind = err.kind();
+            if kind == ErrorKind::WouldBlock {
+                break;
+            }
 
-        let event_state = guard.deref_mut();
-        *event_state = IoEvent::ShouldClose;
-        return;
-    }
+            if kind != ErrorKind::UnexpectedEof
+                && kind != ErrorKind::ConnectionReset
+                && kind != ErrorKind::ConnectionAborted
+            {
+                error!("During recv: {}", err);
+            }
 
-    // Update the state so that the next iteration over the ConnectionSlab
-    // will re-arm this connection in epoll
-    let mut guard = match (*arc_connection).state.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner()
+            // Update the state so that the next iteration over the ConnectionSlab
+            // will remove this connection.
+            let mut guard = match (*arc_connection).event.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner()
+            };
+
+            let event_state = guard.deref_mut();
+            *event_state = IoEvent::ShouldClose;
+        }
     };
-
-    let io_state = guard.deref_mut();
-    *io_state = IoState::ReArm;
-
-    // Hand off the messages on to the consumer
-    let mut queue = recv_result.unwrap();
-    for msg in queue.drain(..) {
-        let EventHandler(ptr) = handler;
-        let arc_stream = (*arc_connection).stream.clone();
-        (*ptr).on_data_received(arc_stream, msg);
-    }
 }
