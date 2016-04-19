@@ -171,7 +171,10 @@ unsafe fn setup_listener_options(listener: &TcpListener, handler: EventHandler) 
     (*handler_ptr).on_server_created(fd);
 }
 
-unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab, handler: EventHandler) {
+unsafe fn handle_new_connection(tcp_stream: TcpStream,
+                                new_connections: &NewConnectionSlab,
+                                handler: EventHandler)
+{
     // Take ownership of tcp_stream's underlying file descriptor
     let fd = tcp_stream.into_raw_fd();
 
@@ -337,11 +340,10 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
     }
 }
 
-/// Traverses the "main" connection_slab looking for connections in IoState::New or IoState::ReArm
-/// It then either adds the new connection to epoll's interest list, or re-arms the fd with a
-/// new event mask.
-unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab)
-{
+/// Traverses the "main" connection_slab looking for connections in the IoState::New
+/// or IoState::ReArm it then either adds the new connection to epoll's interest list,
+/// or re-arms the fd with a new event mask.
+unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab) {
     // Unwrap/dereference our Slab from Arc<Unsafe<T>>
     let slab_ptr = (*connection_slab).inner.get();
 
@@ -461,7 +463,10 @@ unsafe fn find_connection_from_fd(fd: RawFd,
     Err(())
 }
 
-unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: EventHandler) {
+unsafe fn io_sentinel(connection_slab: ConnectionSlab,
+                      thread_pool: ThreadPool,
+                      handler: EventHandler)
+{
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
     let _100ms = 1000000 * 100;
@@ -512,6 +517,8 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
     if recv_result.is_err() {
         let err = recv_result.unwrap_err();
         let kind = err.kind();
+
+        trace!("Error during recv: {}", err);
 
         if kind != ErrorKind::UnexpectedEof
             && kind != ErrorKind::ConnectionReset
