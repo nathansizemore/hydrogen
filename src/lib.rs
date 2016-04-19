@@ -30,14 +30,13 @@ mod server;
 
 pub trait Stream : AsRawFd + Send + Sync {
     fn recv(&mut self) -> Result<Vec<Vec<u8>>, Error>;
-    fn send(&mut self, buf: &[u8]) -> Result<usize, Error>;
+    fn send(&mut self, buf: &[u8]) -> Result<(), Error>;
 }
 
 pub trait Handler {
     fn on_listener_created(&mut self, listener: &mut TcpListener);
     fn on_new_connection(&mut self, fd: RawFd) -> Arc<UnsafeCell<Stream>>;
-    fn on_data_received(&mut self, stream: Arc<UnsafeCell<Stream>>, buf: Vec<u8>);
-    fn on_error(&mut self, err: Error);
+    fn on_data_received(&mut self, arc_stream: Arc<UnsafeCell<Stream>>, buf: Vec<u8>);
     fn on_connection_removed(&mut self, fd: RawFd);
 }
 

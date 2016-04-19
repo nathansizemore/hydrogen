@@ -7,13 +7,13 @@
 
 
 use std::thread;
+use std::io::{Error, ErrorKind};
 use std::time::Duration;
 use std::ops::DerefMut;
 use std::cell::UnsafeCell;
 use std::sync::{Arc, Mutex};
-use std::io::{Error, ErrorKind};
 use std::net::{TcpStream, TcpListener};
-use std::os::unix::io::{RawFd, IntoRawFd};
+use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 
 use libc;
 use errno::errno;
@@ -151,9 +151,8 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler
         panic!();
     }
 
-    let mut listener = listener_result.unwrap();
-    let EventHandler(handler_ptr) = handler.clone();
-    (*handler_ptr).on_listener_created(&mut listener);
+    let listener = listener_result.unwrap();
+    setup_listener_options(&listener, handler.clone());
 
     for accept_attempt in listener.incoming() {
         match accept_attempt {
@@ -165,7 +164,17 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler
     drop(listener);
 }
 
-unsafe fn handle_new_connection(tcp_stream: TcpStream, new_connections: &NewConnectionSlab, handler: EventHandler) {
+unsafe fn setup_listener_options(listener: &TcpListener, handler: EventHandler) {
+    let fd = listener.as_raw_fd();
+    let EventHandler(handler_ptr) = handler;
+
+    (*handler_ptr).on_server_created(fd);
+}
+
+unsafe fn handle_new_connection(tcp_stream: TcpStream,
+                                new_connections: &NewConnectionSlab,
+                                handler: EventHandler)
+{
     // Take ownership of tcp_stream's underlying file descriptor
     let fd = tcp_stream.into_raw_fd();
 
@@ -331,11 +340,10 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
     }
 }
 
-/// Traverses the "main" connection_slab looking for connections in IoState::New or IoState::ReArm
-/// It then either adds the new connection to epoll's interest list, or re-arms the fd with a
-/// new event mask.
-unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab)
-{
+/// Traverses the "main" connection_slab looking for connections in the IoState::New
+/// or IoState::ReArm it then either adds the new connection to epoll's interest list,
+/// or re-arms the fd with a new event mask.
+unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &ConnectionSlab) {
     // Unwrap/dereference our Slab from Arc<Unsafe<T>>
     let slab_ptr = (*connection_slab).inner.get();
 
@@ -455,7 +463,10 @@ unsafe fn find_connection_from_fd(fd: RawFd,
     Err(())
 }
 
-unsafe fn io_sentinel(connection_slab: ConnectionSlab, thread_pool: ThreadPool, handler: EventHandler) {
+unsafe fn io_sentinel(connection_slab: ConnectionSlab,
+                      thread_pool: ThreadPool,
+                      handler: EventHandler)
+{
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
     let _100ms = 1000000 * 100;
@@ -502,46 +513,58 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
     let stream_ptr = (*arc_connection).stream.get();
 
     // Attempt recv
-    let recv_result = (*stream_ptr).recv();
-    if recv_result.is_err() {
-        let err = recv_result.unwrap_err();
-        let kind = err.kind();
+    match (*stream_ptr).recv() {
+        Ok(mut queue) => {
+            // Update the state so that the next iteration over the ConnectionSlab
+            // will re-arm this connection in epoll
+            let mut guard = match (*arc_connection).state.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner()
+            };
 
-        if kind != ErrorKind::UnexpectedEof
-            && kind != ErrorKind::ConnectionReset
-            && kind != ErrorKind::ConnectionAborted
-            && kind != ErrorKind::WouldBlock
-        {
-            error!("During recv: {}", err);
+            let io_state = guard.deref_mut();
+            *io_state = IoState::ReArm;
+
+            // Hand off the messages on to the consumer
+            for msg in queue.drain(..) {
+                let EventHandler(ptr) = handler;
+                let arc_stream = (*arc_connection).stream.clone();
+                (*ptr).on_data_received(arc_stream, msg);
+            }
         }
 
-        // Update the state so that the next iteration over the ConnectionSlab
-        // will remove this connection.
-        let mut guard = match (*arc_connection).event.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner()
-        };
+        Err(err) => {
+            let kind = err.kind();
+            if kind == ErrorKind::WouldBlock {
+                // Update the state so that the next iteration over the ConnectionSlab
+                // will re-arm this connection in epoll
+                let mut guard = match (*arc_connection).state.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner()
+                };
 
-        let event_state = guard.deref_mut();
-        *event_state = IoEvent::ShouldClose;
-        return;
-    }
+                let io_state = guard.deref_mut();
+                *io_state = IoState::ReArm;
 
-    // Update the state so that the next iteration over the ConnectionSlab
-    // will re-arm this connection in epoll
-    let mut guard = match (*arc_connection).state.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner()
+                return;
+            }
+
+            if kind != ErrorKind::UnexpectedEof
+                && kind != ErrorKind::ConnectionReset
+                && kind != ErrorKind::ConnectionAborted
+            {
+                error!("During recv: {}", err);
+            }
+
+            // Update the state so that the next iteration over the ConnectionSlab
+            // will remove this connection.
+            let mut guard = match (*arc_connection).event.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner()
+            };
+
+            let event_state = guard.deref_mut();
+            *event_state = IoEvent::ShouldClose;
+        }
     };
-
-    let io_state = guard.deref_mut();
-    *io_state = IoState::ReArm;
-
-    // Hand off the messages on to the consumer
-    let mut queue = recv_result.unwrap();
-    for msg in queue.drain(..) {
-        let EventHandler(ptr) = handler;
-        let arc_stream = (*arc_connection).stream.clone();
-        (*ptr).on_data_received(arc_stream, msg);
-    }
 }
