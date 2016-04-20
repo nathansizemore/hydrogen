@@ -515,15 +515,27 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
     // Attempt recv
     match (*stream_ptr).recv() {
         Ok(mut queue) => {
-            // Update the state so that the next iteration over the ConnectionSlab
-            // will re-arm this connection in epoll
-            let mut guard = match (*arc_connection).state.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
+            { // Mutex lock
+                let mut event_guard = match (*arc_connection).event.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner()
+                };
 
-            let io_state = guard.deref_mut();
-            *io_state = IoState::ReArm;
+                let event_state = event_guard.deref_mut();
+                *event_state == IoEvent::Waiting;
+            } // Mutex unlock
+
+            { // Mutex lock
+                // Update the state so that the next iteration over the ConnectionSlab
+                // will re-arm this connection in epoll
+                let mut guard = match (*arc_connection).state.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner()
+                };
+
+                let io_state = guard.deref_mut();
+                *io_state = IoState::ReArm;
+            } // Mutex unlock
 
             // Hand off the messages on to the consumer
             for msg in queue.drain(..) {
@@ -536,15 +548,27 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
         Err(err) => {
             let kind = err.kind();
             if kind == ErrorKind::WouldBlock {
-                // Update the state so that the next iteration over the ConnectionSlab
-                // will re-arm this connection in epoll
-                let mut guard = match (*arc_connection).state.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner()
-                };
+                { // Mutex lock
+                    let mut event_guard = match (*arc_connection).event.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner()
+                    };
 
-                let io_state = guard.deref_mut();
-                *io_state = IoState::ReArm;
+                    let event_state = event_guard.deref_mut();
+                    *event_state == IoEvent::Waiting;
+                } // Mutex unlock
+
+                { // Mutex lock
+                    // Update the state so that the next iteration over the ConnectionSlab
+                    // will re-arm this connection in epoll
+                    let mut guard = match (*arc_connection).state.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner()
+                    };
+
+                    let io_state = guard.deref_mut();
+                    *io_state = IoState::ReArm;
+                } // Mutex unlock
 
                 return;
             }
