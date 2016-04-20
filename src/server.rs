@@ -168,7 +168,7 @@ unsafe fn setup_listener_options(listener: &TcpListener, handler: EventHandler) 
     let fd = listener.as_raw_fd();
     let EventHandler(handler_ptr) = handler;
 
-    (*handler_ptr).on_listener_created(fd);
+    (*handler_ptr).on_server_created(fd);
 }
 
 unsafe fn handle_new_connection(tcp_stream: TcpStream,

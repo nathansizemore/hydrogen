@@ -34,7 +34,7 @@ pub trait Stream : AsRawFd + Send + Sync {
 }
 
 pub trait Handler {
-    fn on_listener_created(&mut self, listener: &mut TcpListener);
+    fn on_server_created(&mut self, fd: RawFd);
     fn on_new_connection(&mut self, fd: RawFd) -> Arc<UnsafeCell<Stream>>;
     fn on_data_received(&mut self, arc_stream: Arc<UnsafeCell<Stream>>, buf: Vec<u8>);
     fn on_connection_removed(&mut self, fd: RawFd);
