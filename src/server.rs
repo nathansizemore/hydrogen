@@ -522,7 +522,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
                 };
 
                 let event_state = event_guard.deref_mut();
-                *event_state == IoEvent::Waiting;
+                *event_state = IoEvent::Waiting;
             } // Mutex unlock
 
             { // Mutex lock
@@ -555,7 +555,7 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
                     };
 
                     let event_state = event_guard.deref_mut();
-                    *event_state == IoEvent::Waiting;
+                    *event_state = IoEvent::Waiting;
                 } // Mutex unlock
 
                 { // Mutex lock
