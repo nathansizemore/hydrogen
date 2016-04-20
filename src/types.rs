@@ -73,6 +73,9 @@ pub struct Connection {
     pub event: Mutex<IoEvent>,
     /// Current I/O state for socket.
     pub state: Mutex<IoState>,
+    /// Mutex to ensure thread safe, ordered writes to our streams.
+    /// They may have internal buffers
+    pub tx_mutex: Mutex<()>,
     /// Socket (Stream implemented trait-object).
     pub stream: Arc<UnsafeCell<Stream>>
 }
@@ -88,9 +91,6 @@ unsafe impl Sync for MutSlab {}
 
 
 pub struct HydrogenSocket {
-    /// Mutex to ensure thread-safe writes above the atomically guaranteed
-    /// write calls to libc::write(2)
-    tx_mutex: Mutex<()>,
     /// The connection this socket represents
     arc_connection: Arc<Connection>
 }
@@ -98,13 +98,12 @@ pub struct HydrogenSocket {
 impl HydrogenSocket {
     pub fn new(arc_connection: Arc<Connection>) -> HydrogenSocket {
         HydrogenSocket {
-            tx_mutex: Mutex::new(()),
             arc_connection: arc_connection
         }
     }
 
     pub fn send(&self, buf: &[u8]) {
-        let _ = match self.tx_mutex.lock() {
+        let _ = match self.arc_connection.tx_mutex.lock() {
             Ok(g) => g,
             Err(p) => p.into_inner()
         };

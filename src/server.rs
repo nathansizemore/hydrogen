@@ -123,14 +123,15 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream,
 
     // Execute EventHandler's constructor
     let EventHandler(handler_ptr) = handler;
-    let stream = (*handler_ptr).on_new_connection(fd);
+    let arc_stream = (*handler_ptr).on_new_connection(fd);
 
     // Create a connection structure
     let connection = Connection {
         fd: fd,
         event: Mutex::new(IoEvent::Waiting),
         state: Mutex::new(IoState::New),
-        stream: stream
+        tx_mutex: Mutex::new(()),
+        stream: arc_stream
     };
 
     // Insert it into the NewConnectionSlab
@@ -474,6 +475,11 @@ unsafe fn io_sentinel(connection_slab: ConnectionSlab,
 }
 
 unsafe fn handle_socket_writable(arc_connection: Arc<Connection>) {
+    let _ = match arc_connection.tx_mutex.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner()
+    };
+
     // Get a pointer into UnsafeCell<Stream>
     let stream_ptr = arc_connection.stream.get();
 
@@ -583,8 +589,8 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
             // Hand off the messages on to the consumer
             for msg in queue.drain(..) {
                 let EventHandler(ptr) = handler;
-                let arc_stream = (*arc_connection).stream.clone();
-                (*ptr).on_data_received(arc_stream, msg);
+                let hydrogen_socket = HydrogenSocket::new(arc_connection.clone());
+                (*ptr).on_data_received(hydrogen_socket, msg);
             }
         }
 
