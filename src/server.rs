@@ -267,17 +267,12 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
                                    handler: &EventHandler)
 {
     let slab_ptr = (*connection_slab).inner.get();
-    let max_removals = (*slab_ptr).len();
-    let mut offsets = Vec::<usize>::with_capacity(max_removals);
+    let slab_len = (*slab_ptr).len() as isize;
 
-    for x in 0..max_removals {
-        match (*slab_ptr)[x] {
+    let mut x: isize = 0;
+    while x < slab_len {
+        match (*slab_ptr)[x as usize] {
             Some(ref arc_connection) => {
-                // Assuming spin locks would be a solid choice here, but not
-                // currently a direct API from stdlib. Possibly could use the
-                // `try_lock()` function from Mutex with a timer and loop, but that
-                // just seems a bit trickier to get right than what I'm willing to
-                // devote during this loop.
                 let event_state: IoEvent;
                 { // Mutex lock
                     let guard = match (*arc_connection).event.lock() {
@@ -288,26 +283,25 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
                 } // Mutex unlock
 
                 if event_state == IoEvent::ShouldClose {
-                    offsets.push(x);
+                    let arc_connection = (*slab_ptr).remove(x as usize).unwrap();
+
+                    // Inform kernel we're done
+                    close_connection(&arc_connection);
+
+                    // Inform the consumer connection is no longer valid
+                    let fd = (*arc_connection).fd;
+                    let handler_clone = (*handler).clone();
+                    thread_pool.execute(move || {
+                        let EventHandler(ptr) = handler_clone;
+                        (*ptr).on_connection_removed(fd);
+                    });
+
+                    x -= 1;
                 }
             }
             None => { }
         }
-    }
-
-    for offset in offsets {
-        let arc_connection = (*slab_ptr).remove(offset).unwrap();
-
-        // Inform kernel we're done
-        close_connection(&arc_connection);
-
-        // Inform the consumer connection is no longer valid
-        let fd = (*arc_connection).fd;
-        let handler_clone = (*handler).clone();
-        thread_pool.execute(move || {
-            let EventHandler(ptr) = handler_clone;
-            (*ptr).on_connection_removed(fd);
-        });
+        x += 1;
     }
 }
 
