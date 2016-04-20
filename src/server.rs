@@ -20,89 +20,32 @@ use errno::errno;
 use threadpool::ThreadPool;
 use simple_slab::Slab;
 
+use types::*;
 use config::Config;
 use super::{Stream, Handler};
 
 
 // When added to epoll, these will be the conditions of kernel notification:
 //
-// EPOLLIN          - Data is available in kerndl buffer.
+// EPOLLIN          - Data is available in kernel buffer.
+// EPOLLOUT         - Kernel's buffer has room to write to.
 // EPOLLRDHUP       - Peer closed connection.
 // EPOLLPRI         - Urgent data for read available.
 // EPOLLET          - Register in EdgeTrigger mode.
 // EPOLLONESHOT     - After an event is pulled out with epoll_wait(2) the associated
 //                    file descriptor is internally disabled and no other events will
 //                    be reported by the epoll interface.
-const EVENTS: i32 = libc::EPOLLIN |
+const EVENTS_R: i32 = libc::EPOLLIN |
                     libc::EPOLLRDHUP |
                     libc::EPOLLPRI |
                     libc::EPOLLET |
                     libc::EPOLLONESHOT;
-
-
-#[derive(Clone, PartialEq, Eq)]
-enum IoEvent {
-    /// Waiting for an updte from epoll
-    Waiting,
-    /// Epoll has reported data is waiting to be read from socket.
-    DataAvailable,
-    /// Error/Disconnect/Etc has occured and socket needs removed from server.
-    ShouldClose
-}
-
-#[derive(Clone, PartialEq, Eq)]
-enum IoState {
-    /// New connection, needs added to epoll instance.
-    New,
-    /// Socket has no data avialable for reading, but is armed and in the
-    /// epoll instance's interest list.
-    Waiting,
-    /// Socket is currently in use (reading).
-    InUse,
-    /// All I/O operations have been exhausted and socket is ready to be
-    /// re-inserted into the epoll instance's interest list.
-    ReArm
-}
-
-struct EventHandler(pub *mut Handler);
-unsafe impl Send for EventHandler {}
-unsafe impl Sync for EventHandler {}
-impl Clone for EventHandler {
-    fn clone(&self) -> EventHandler {
-        let EventHandler(ptr) = *self;
-        unsafe {
-            let same_location = &mut *ptr;
-            EventHandler(same_location)
-        }
-    }
-}
-
-struct Connection {
-    /// Underlying file descriptor.
-    fd: RawFd,
-    /// Last reported event fired from epoll.
-    event: Mutex<IoEvent>,
-    /// Current I/O state for socket.
-    state: Mutex<IoState>,
-    /// Socket (Stream implemented trait-object).
-    stream: Arc<UnsafeCell<Stream>>
-}
-unsafe impl Send for Connection {}
-unsafe impl Sync for Connection {}
-
-
-struct MutSlab {
-    inner: UnsafeCell<Slab<Arc<Connection>>>
-}
-unsafe impl Send for MutSlab {}
-unsafe impl Sync for MutSlab {}
-
-
-/// Memory region for all concurrent connections.
-type ConnectionSlab = Arc<MutSlab>;
-
-/// Protected memory region for newly accepted connections.
-type NewConnectionSlab = Arc<Mutex<Slab<Connection>>>;
+const EVENTS_RW: i32 = libc::EPOLLIN |
+                    libc::EPOLLOUT |
+                    libc::EPOLLRDHUP |
+                    libc::EPOLLPRI |
+                    libc::EPOLLET |
+                    libc::EPOLLONESHOT;
 
 
 pub fn begin(handler: Box<Handler>, cfg: Config) {
@@ -353,7 +296,7 @@ unsafe fn prepare_connections_for_epoll_wait(epfd: RawFd, connection_slab: &Conn
         if *io_state == IoState::New {
             add_connection_to_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
-        } else if *io_state == IoState::ReArm {
+        } else if *io_state == IoState::ReArmR || *io_state == IoState::ReArmRW {
             rearm_connection_in_epoll(epfd, arc_connection);
             *io_state = IoState::Waiting;
         }
@@ -366,7 +309,7 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_ADD,
                        fd,
-                       &mut libc::epoll_event { events: EVENTS as u32, u64: fd as u64 });
+                       &mut libc::epoll_event { events: EVENTS_R as u32, u64: fd as u64 });
 
    if result < 0 {
        let err = Error::from_raw_os_error(errno().0 as i32);
@@ -384,11 +327,28 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
+    let mut rw_event = false;
+    { // Mutex lock
+        let mut guard = match (*arc_connection).state.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        };
+        let io_state = guard.deref_mut();
+        if *io_state == IoState::ReArmRW {
+            rw_event = true;
+        }
+    } // Mutex unlock
+
     let fd = (*arc_connection).fd;
+    let events = if rw_event {
+        EVENTS_RW as u32
+    } else {
+        EVENTS_R as u32
+    };
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
                        fd,
-                       &mut libc::epoll_event { events: EVENTS as u32, u64: fd as u64 });
+                       &mut libc::epoll_event { events: events, u64: fd as u64 });
 
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
@@ -528,7 +488,9 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
                 };
 
                 let io_state = guard.deref_mut();
-                *io_state = IoState::ReArm;
+                if *io_state != IoState::ReArmRW {
+                    *io_state = IoState::ReArmR;
+                }
             } // Mutex unlock
 
             // Hand off the messages on to the consumer
@@ -561,7 +523,9 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
                     };
 
                     let io_state = guard.deref_mut();
-                    *io_state = IoState::ReArm;
+                    if *io_state != IoState::ReArmRW {
+                        *io_state = IoState::ReArmR;
+                    }
                 } // Mutex unlock
 
                 return;

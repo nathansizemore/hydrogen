@@ -20,11 +20,12 @@ use std::cell::UnsafeCell;
 use std::os::unix::io::{RawFd, AsRawFd};
 
 
-use config::Config;
+pub use config::Config;
+pub use types::HydrogenSocket;
 
-pub mod config;
-
+mod types;
 mod server;
+mod config;
 
 
 pub trait Stream : AsRawFd + Send + Sync {
