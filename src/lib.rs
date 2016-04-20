@@ -17,7 +17,6 @@ extern crate simple_slab;
 use std::io::Error;
 use std::sync::Arc;
 use std::cell::UnsafeCell;
-use std::net::TcpListener;
 use std::os::unix::io::{RawFd, AsRawFd};
 
 
