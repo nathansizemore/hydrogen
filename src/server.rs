@@ -367,6 +367,7 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
 /// Traverses the ConnectionSlab and updates any connection's state reported changed by epoll.
 unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[libc::epoll_event]) {
     const READ_EVENT: u32 = libc::EPOLLIN as u32;
+    const WRITE_EVENT: u32 = libc::EPOLLOUT as u32;
 
     for event in events.iter() {
         // Locate the connection this event is for
@@ -381,6 +382,7 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[libc::epo
 
         // Event type branch
         let data_available = (event.events & READ_EVENT) > 0;
+        let write_available = (event.events & WRITE_EVENT) > 0;
 
         // If we've properly handled race conditions correctly and state ordering,
         // the only thing we care about here are connections that are currently
@@ -391,11 +393,12 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab, events: &[libc::epo
         };
 
         let io_event = guard.deref_mut();
-
-        if data_available {
-            if *io_event == IoEvent::Waiting {
-                *io_event = IoEvent::DataAvailable;
-            }
+        if data_available && write_available {
+            *io_event = IoEvent::DataAvailableAndWritable;
+        } else if data_available {
+            *io_event = IoEvent::DataAvailable;
+        } else if write_available {
+            *io_event = IoEvent::Writable;
         } else {
             *io_event = IoEvent::ShouldClose;
         }
@@ -433,33 +436,117 @@ unsafe fn io_sentinel(connection_slab: ConnectionSlab,
         // are in the IoEvent::DataAvailable state.
         let slab_ptr = (*connection_slab).inner.get();
         for ref arc_connection in (*slab_ptr).iter() {
-            let mut event_guard = match (*arc_connection).event.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-
-            let event_state = event_guard.deref_mut();
-            if *event_state == IoEvent::DataAvailable {
-                let mut state_guard = match (*arc_connection).state.lock() {
+            let event_state;
+            { // Mutex lock
+                let mut event_guard = match (*arc_connection).event.lock() {
                     Ok(g) => g,
                     Err(p) => p.into_inner()
                 };
+                event_state = (*(event_guard.deref_mut())).clone();
+            } // Mutex unlock
 
-                let io_state = state_guard.deref_mut();
-                if *io_state == IoState::Waiting {
-                    // Update state so other threads do not interfere
-                    // with this connection.
-                    *io_state = IoState::InUse;
-
+            match event_state {
+                IoEvent::DataAvailable => {
                     let conn_clone = (*arc_connection).clone();
                     let handler_clone = handler.clone();
                     thread_pool.execute(move || {
                         handle_data_available(conn_clone, handler_clone);
                     });
                 }
-            }
+                IoEvent::Writable => {
+                    let conn_clone = (*arc_connection).clone();
+                    thread_pool.execute(move || {
+                        handle_socket_writable(conn_clone);
+                    });
+                }
+                IoEvent::DataAvailableAndWritable => {
+                    let conn_clone = (*arc_connection).clone();
+                    let handler_clone = handler.clone();
+                    thread_pool.execute(move || {
+                        handle_socket_writable(conn_clone.clone());
+                        handle_data_available(conn_clone, handler_clone);
+                    });
+                }
+                _ => { }
+            };
         }
     }
+}
+
+unsafe fn handle_socket_writable(arc_connection: Arc<Connection>) {
+    // Get a pointer into UnsafeCell<Stream>
+    let stream_ptr = arc_connection.stream.get();
+
+    let empty = Vec::<u8>::new();
+    let write_result = (*stream_ptr).send(&empty[..]);
+    if write_result.is_ok() {
+        let starting_event_state;
+        { // Mutex lock
+            // This event will always be hit first when epoll has notified us that
+            // the fd is both writable and has data available for reading. If this
+            // is the case, we need to carefully adjust the state so that when
+            // re-arming the fd, we choose the correct event mask.
+            let mut event_guard = match arc_connection.event.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner()
+            };
+
+            let event_state = event_guard.deref_mut();
+            starting_event_state = (*event_state).clone();
+
+            if *event_state == IoEvent::DataAvailableAndWritable {
+                *event_state = IoEvent::DataAvailable;
+            } else {
+                *event_state = IoEvent::Waiting;
+            }
+        } // Mutex unlock
+
+        // We rely on the handle_data_available function to re-arm the fd for reading,
+        // so if this fd's event mask did not indicate it was both writable and ready
+        // for reading, we need to re-arm it here.
+        if starting_event_state == IoEvent::Writable {
+            { // Mutex lock
+                let mut guard = match arc_connection.state.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner()
+                };
+
+                let io_state = guard.deref_mut();
+                *io_state = IoState::ReArmR;
+            } // Mutex unlock
+        }
+        return;
+    }
+
+    let err = write_result.unwrap_err();
+    if err.kind() == ErrorKind::WouldBlock {
+        { // Mutex lock
+            let mut guard = match arc_connection.state.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner()
+            };
+
+            // We do not care about other states here, because this encompasses all
+            // other options that epoll will update us with.
+            let io_state = guard.deref_mut();
+            *io_state = IoState::ReArmRW;
+        } // Mutex unlock
+        return;
+    }
+
+    { // Mutex lock
+        // If we're in a state of ShouldClose, no need to worry
+        // about any other operations...
+        let mut event_guard = match arc_connection.event.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        };
+
+        let event_state = event_guard.deref_mut();
+        if *event_state != IoEvent::ShouldClose {
+            *event_state = IoEvent::ShouldClose;
+        }
+    } // Mutex unlock
 }
 
 unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventHandler) {
@@ -527,7 +614,6 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
                         *io_state = IoState::ReArmR;
                     }
                 } // Mutex unlock
-
                 return;
             }
 

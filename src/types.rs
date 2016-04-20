@@ -30,6 +30,10 @@ pub enum IoEvent {
     Waiting,
     /// Epoll has reported data is waiting to be read from socket.
     DataAvailable,
+    /// Epoll has reported the fd is available to be written to.
+    Writable,
+    /// Epoll has reported data is waiting to be read from socket and it is writable.
+    DataAvailableAndWritable,
     /// Error/Disconnect/Etc has occured and socket needs removed from server.
     ShouldClose
 }
@@ -41,8 +45,6 @@ pub enum IoState {
     /// Socket has no data avialable for reading, but is armed and in the
     /// epoll instance's interest list.
     Waiting,
-    /// Socket is currently in use (reading).
-    InUse,
     /// All I/O operations have been exhausted and socket is ready to be
     /// re-inserted into the epoll instance's interest list for read events.
     ReArmR,
@@ -117,19 +119,6 @@ impl HydrogenSocket {
 
         let err = write_result.unwrap_err();
         if err.kind() == ErrorKind::WouldBlock {
-            { // Mutex lock
-                // If we're in a state of ShouldClose, no need to worry
-                // about any other operations...
-                let mut event_guard = match self.arc_connection.event.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner()
-                };
-
-                let event_state = event_guard.deref_mut();
-                if *event_state == IoEvent::ShouldClose {
-                    return;
-                }
-            } // Mutex unlock
             { // Mutex lock
                 let mut guard = match self.arc_connection.state.lock() {
                     Ok(g) => g,
