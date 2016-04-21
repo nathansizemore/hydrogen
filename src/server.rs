@@ -309,8 +309,12 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>, flags: i32) {
+    trace!("Rearming fd with flags: {}", flags);
+
     let fd = arc_connection.fd;
     let events = DEFAULT_EVENTS | flags;
+
+    trace!("Fd: {} final event bitmask: {}", fd, events);
 
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
@@ -341,6 +345,9 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
     for event in events.iter() {
         // Locate the connection this event is for
         let fd = event.u64 as RawFd;
+
+        trace!("Received event for fd: {}", fd);
+
         let find_result = find_connection_from_fd(fd, connection_slab);
         if find_result.is_err() {
             error!("Finding fd: {} in connection_slab", fd);
@@ -365,10 +372,13 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
         }
 
         let io_event = if read_available && write_available {
+            trace!("Event was readable && writable");
             IoEvent::ReadWriteAvailable
         } else if read_available {
+            trace!("Event is readable");
             IoEvent::ReadAvailable
         } else {
+            trace!("Event is writable");
             IoEvent::WriteAvailable
         };
 
@@ -376,6 +386,8 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
             event: io_event,
             arc_connection: arc_connection
         };
+
+        trace!("Pushing event onto io_queue");
         { // Mutex lock
             let mut io_queue = match arc_io_queue.lock() {
                 Ok(g) => g,
@@ -503,6 +515,8 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
                             epfd: RawFd)
                             -> i32
 {
+    trace!("handling read event");
+
     let stream_ptr = arc_connection.stream.get();
 
     // Attempt recv

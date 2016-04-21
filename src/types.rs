@@ -111,6 +111,8 @@ impl HydrogenSocket {
     }
 
     pub fn send(&self, buf: &[u8]) {
+        trace!("sending...");
+
         let err;
         { // Mutex lock
             let _ = match self.arc_connection.tx_mutex.lock() {
@@ -123,6 +125,7 @@ impl HydrogenSocket {
                 (*stream_ptr).send(buf)
             };
             if write_result.is_ok() {
+                trace!("Send ok");
                 return;
             }
 
@@ -139,6 +142,7 @@ impl HydrogenSocket {
                 }
             }
             _ => {
+                trace!("Unexpected err occured during send");
                 { // Mutex lock
                     let mut err_state = match self.arc_connection.err_mutex.lock() {
                         Ok(g) => g,
