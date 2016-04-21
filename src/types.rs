@@ -131,6 +131,8 @@ impl HydrogenSocket {
 
         match err.kind() {
             ErrorKind::WouldBlock => {
+                trace!("Write received WouldBlock");
+
                 let execute = self.rearm_fn;
                 unsafe {
                     execute(self.epfd, &(self.arc_connection), libc::EPOLLOUT);

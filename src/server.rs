@@ -460,6 +460,8 @@ unsafe fn io_sentinel(epfd: RawFd,
 /// Handles an EPOLLOUT event. An empty buffer is sent down the tx line to
 /// force whatever was left in the tx_buffer into the kernel's outbound buffer.
 unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
+    trace!("Handling backlog write event for fd: {}", arc_connection.fd);
+
     let err;
     { // Mutex lock
         let _ = match arc_connection.tx_mutex.lock() {
