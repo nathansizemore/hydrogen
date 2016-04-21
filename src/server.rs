@@ -314,7 +314,7 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
     let fd = arc_connection.fd;
     let events = DEFAULT_EVENTS | flags;
 
-    trace!("Fd: {} final event bitmask: {}", fd, events);
+    trace!("Fd: {} final event bitmask: {}", fd, events as u32);
 
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
