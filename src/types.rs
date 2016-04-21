@@ -6,8 +6,7 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::io::{Error, ErrorKind};
-use std::ops::DerefMut;
+use std::io::Error;
 use std::cell::UnsafeCell;
 use std::sync::{Arc, Mutex};
 use std::os::unix::io::{RawFd, AsRawFd};
@@ -37,9 +36,9 @@ pub enum IoEvent {
 #[derive(Clone)]
 pub struct IoPair {
     /// The type of I/O needed on this Connection
-    event: IoEvent,
+    pub event: IoEvent,
     /// The connection `event` is paired with
-    arc_connection: Arc<Connection>
+    pub arc_connection: Arc<Connection>
 }
 
 pub struct Connection {

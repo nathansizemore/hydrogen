@@ -6,10 +6,10 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::thread;
+use std::{mem, thread};
+use std::error::Error as StdError;
 use std::io::{Error, ErrorKind};
 use std::time::Duration;
-use std::ops::DerefMut;
 use std::cell::UnsafeCell;
 use std::sync::{Arc, Mutex};
 use std::net::{TcpStream, TcpListener};
@@ -28,24 +28,17 @@ use super::{Stream, Handler};
 // When added to epoll, these will be the conditions of kernel notification:
 //
 // EPOLLIN          - Data is available in kernel buffer.
-// EPOLLOUT         - Kernel's buffer has room to write to.
 // EPOLLRDHUP       - Peer closed connection.
 // EPOLLPRI         - Urgent data for read available.
 // EPOLLET          - Register in EdgeTrigger mode.
 // EPOLLONESHOT     - After an event is pulled out with epoll_wait(2) the associated
 //                    file descriptor is internally disabled and no other events will
 //                    be reported by the epoll interface.
-const EVENTS_R: i32 = libc::EPOLLIN |
-                    libc::EPOLLRDHUP |
-                    libc::EPOLLPRI |
-                    libc::EPOLLET |
-                    libc::EPOLLONESHOT;
-const EVENTS_RW: i32 = libc::EPOLLIN |
-                    libc::EPOLLOUT |
-                    libc::EPOLLRDHUP |
-                    libc::EPOLLPRI |
-                    libc::EPOLLET |
-                    libc::EPOLLONESHOT;
+const DEFAULT_EVENTS: i32 = libc::EPOLLIN |
+                            libc::EPOLLRDHUP |
+                            libc::EPOLLPRI |
+                            libc::EPOLLET |
+                            libc::EPOLLONESHOT;
 
 // Maximum number of events returned from epoll_wait
 const MAX_EVENTS: i32 = 100;
@@ -137,13 +130,12 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream,
     };
 
     // Insert it into the NewConnectionSlab
-    let mut guard = match (*new_connections).lock() {
+    let mut slab = match (*new_connections).lock() {
         Ok(g) => g,
         Err(p) => p.into_inner()
     };
 
-    let slab = guard.deref_mut();
-    slab.insert(connection);
+    (&mut *slab).insert(connection);
 }
 
 /// Main event loop
@@ -168,17 +160,19 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     // ThreadPool with user specified number of threads
     let thread_pool = ThreadPool::new(threads);
 
-    // Start the I/O Sentinel
-    let conn_slab_clone = connection_slab.clone();
-    let t_pool_clone = thread_pool.clone();
-    let handler_clone = handler.clone();
-    thread::Builder::new()
-        .name("I/O Sentinel".to_string())
-        .spawn(move || { io_sentinel(conn_slab_clone, t_pool_clone, handler_clone) })
-        .unwrap();
-
     // Our I/O queue for Connections needing various I/O operations.
     let arc_io_queue = Arc::new(Mutex::new(Vec::<IoPair>::with_capacity(MAX_EVENTS as usize)));
+
+    // Start the I/O Sentinel
+    let t_pool_clone = thread_pool.clone();
+    let handler_clone = handler.clone();
+    let io_queue = arc_io_queue.clone();
+    thread::Builder::new()
+        .name("I/O Sentinel".to_string())
+        .spawn(move || {
+            io_sentinel(epfd, io_queue, t_pool_clone, handler_clone)
+        })
+        .unwrap();
 
     // Scratch space for epoll returned events
     let mut event_buffer = Vec::<libc::epoll_event>::with_capacity(MAX_EVENTS as usize);
@@ -224,13 +218,19 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 
         let arc_connection = connection_opt.unwrap();
 
-        let err_state;
+        let mut err_state: Option<Error> = None;
         { // Mutex lock
-            let guard = match arc_connection.err_mutex.lock() {
+            let mut guard = match arc_connection.err_mutex.lock() {
                 Ok(g) => g,
                 Err(p) => p.into_inner()
             };
-            err_state = (*guard).clone();
+
+            //let err_opt = guard.deref_mut();
+            if (&mut *guard).is_some() {
+                let err_kind = (&mut *guard).as_ref().unwrap().kind();
+                let err_desc = (&mut *guard).as_ref().unwrap().description();
+                err_state = Some(Error::new(err_kind, err_desc));
+            }
         } // Mutex unlock
 
         match err_state {
@@ -271,19 +271,18 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
                                  connection_slab: &ConnectionSlab,
                                  epfd: RawFd)
 {
-    let mut guard = match new_connections.lock() {
+    let mut new_slab = match new_connections.lock() {
         Ok(g) => g,
         Err(p) => p.into_inner()
     };
 
-    let new_slab = guard.deref_mut();
-    let num_connections = new_slab.len();
+    let num_connections = (&mut *new_slab).len();
     let arc_main_slab = (*connection_slab).inner.get();
     for _ in 0..num_connections {
-        let connection = new_slab.remove(0).unwrap();
+        let connection = (&mut *new_slab).remove(0).unwrap();
         let arc_connection = Arc::new(connection);
         (*arc_main_slab).insert(arc_connection.clone());
-        add_connection_to_epoll(epfd, arc_connection);
+        add_connection_to_epoll(epfd, &arc_connection);
     }
 }
 
@@ -293,58 +292,41 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_ADD,
                        fd,
-                       &mut libc::epoll_event { events: EVENTS_R as u32, u64: fd as u64 });
+                       &mut libc::epoll_event { events: DEFAULT_EVENTS as u32, u64: fd as u64 });
 
    if result < 0 {
        let err = Error::from_raw_os_error(errno().0 as i32);
        error!("Adding fd to epoll: {}", err);
 
-       // Update state to IoEvent::ShouldClose
-       let mut guard = match (*arc_connection).event.lock() {
+       let mut err_state = match arc_connection.err_mutex.lock() {
            Ok(g) => g,
            Err(p) => p.into_inner()
        };
-       let mut event_state = guard.deref_mut();
-       *event_state = IoEvent::ShouldClose;
+
+       *err_state = Some(err);
    }
 }
 
 /// Re-arms a connection in the epoll interest list with the event mask.
-unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
-    let mut rw_event = false;
-    { // Mutex lock
-        let mut guard = match (*arc_connection).state.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner()
-        };
-        let io_state = guard.deref_mut();
-        if *io_state == IoState::ReArmRW {
-            rw_event = true;
-        }
-    } // Mutex unlock
+unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>, flags: i32) {
+    let fd = arc_connection.fd;
+    let events = DEFAULT_EVENTS | flags;
 
-    let fd = (*arc_connection).fd;
-    let events = if rw_event {
-        EVENTS_RW as u32
-    } else {
-        EVENTS_R as u32
-    };
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
                        fd,
-                       &mut libc::epoll_event { events: events, u64: fd as u64 });
+                       &mut libc::epoll_event { events: events as u32, u64: fd as u64 });
 
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
         error!("Re-arming fd in epoll: {}", err);
 
-        // Update state to IoEvent::ShouldClose
-        let mut guard = match (*arc_connection).event.lock() {
+        let mut err_state = match arc_connection.err_mutex.lock() {
             Ok(g) => g,
             Err(p) => p.into_inner()
         };
-        let mut event_state = guard.deref_mut();
-        *event_state = IoEvent::ShouldClose;
+
+        *err_state = Some(err);
     }
 }
 
@@ -372,11 +354,11 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
         let write_available = (event.events & WRITE_EVENT) > 0;
         if !read_available && !write_available {
             { // Mutex lock
-                let mut guard = match arc_connection.err_mutex.lock() {
+                let mut err_opt = match arc_connection.err_mutex.lock() {
                     Ok(g) => g,
                     Err(p) => p.into_inner()
                 };
-                let err_opt = guard.deref_mut();
+
                 *err_opt = Some(Error::new(ErrorKind::ConnectionAborted, "ConnectionAborted"));
             } // Mutex unlock
             continue;
@@ -395,12 +377,11 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
             arc_connection: arc_connection
         };
         { // Mutex lock
-            let mut guard = match arc_io_queue.lock() {
+            let mut io_queue = match arc_io_queue.lock() {
                 Ok(g) => g,
                 Err(p) => p.into_inner()
             };
 
-            let mut io_queue = guard.deref_mut();
             (*io_queue).push(io_pair);
         } // Mutex unlock
     }
@@ -421,7 +402,7 @@ unsafe fn find_connection_from_fd(fd: RawFd,
     Err(())
 }
 
-unsafe fn io_sentinel(connection_slab: ConnectionSlab,
+unsafe fn io_sentinel(epfd: RawFd,
                       arc_io_queue: IoQueue,
                       thread_pool: ThreadPool,
                       handler: EventHandler)
@@ -434,169 +415,105 @@ unsafe fn io_sentinel(connection_slab: ConnectionSlab,
     loop {
         thread::sleep(wait_interval);
 
-        let mut io_queue;
+        let io_queue;
         { // Mutex lock
-            let mut guard = match arc_io_queue.lock() {
+            let mut queue = match arc_io_queue.lock() {
                 Ok(g) => g,
                 Err(p) => p.into_inner()
             };
 
-            let mut queue = guard.deref_mut();
-            let mut empty_queue = Vec::<IoPair>::with_capacity(MAX_EVENTS as usize);
+            let empty_queue = Vec::<IoPair>::with_capacity(MAX_EVENTS as usize);
             io_queue = mem::replace(&mut (*queue), empty_queue);
         } // Mutex unlock
 
-        // TODO - Finish this function up
+        for ref io_pair in io_queue.iter() {
+            let io_event = io_pair.event.clone();
+            let handler_clone = handler.clone();
+            let arc_connection = io_pair.arc_connection.clone();
+            thread_pool.execute(move || {
+                let mut rearm_events = 0i32;
+                if io_event == IoEvent::WriteAvailable
+                    || io_event == IoEvent::ReadWriteAvailable
+                {
+                    let flags = handle_write_event(arc_connection.clone());
+                    if flags == -1 {
+                        return;
+                    }
+                    rearm_events |= flags;
+                }
+                if io_event == IoEvent::ReadAvailable
+                    || io_event == IoEvent::ReadWriteAvailable
+                {
+                    let flags = handle_read_event(arc_connection.clone(), handler_clone);
+                    if flags == -1 {
+                        return;
+                    }
+                    rearm_events |= flags;
+                }
+
+                rearm_connection_in_epoll(epfd, &arc_connection, rearm_events);
+            });
+        }
     }
 }
 
-unsafe fn handle_socket_writable(arc_connection: Arc<Connection>) {
-    let _ = match arc_connection.tx_mutex.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner()
-    };
-
-    // Get a pointer into UnsafeCell<Stream>
-    let stream_ptr = arc_connection.stream.get();
-
-    let empty = Vec::<u8>::new();
-    let write_result = (*stream_ptr).send(&empty[..]);
-    if write_result.is_ok() {
-        let starting_event_state;
-        { // Mutex lock
-            // This event will always be hit first when epoll has notified us that
-            // the fd is both writable and has data available for reading. If this
-            // is the case, we need to carefully adjust the state so that when
-            // re-arming the fd, we choose the correct event mask.
-            let mut event_guard = match arc_connection.event.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-
-            let event_state = event_guard.deref_mut();
-            starting_event_state = (*event_state).clone();
-
-            if *event_state == IoEvent::DataAvailableAndWritable {
-                *event_state = IoEvent::DataAvailable;
-            } else {
-                *event_state = IoEvent::Waiting;
-            }
-        } // Mutex unlock
-
-        // We rely on the handle_data_available function to re-arm the fd for reading,
-        // so if this fd's event mask did not indicate it was both writable and ready
-        // for reading, we need to re-arm it here.
-        if starting_event_state == IoEvent::Writable {
-            { // Mutex lock
-                let mut guard = match arc_connection.state.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner()
-                };
-
-                let io_state = guard.deref_mut();
-                *io_state = IoState::ReArmR;
-            } // Mutex unlock
-        }
-        return;
-    }
-
-    let err = write_result.unwrap_err();
-    if err.kind() == ErrorKind::WouldBlock {
-        { // Mutex lock
-            let mut guard = match arc_connection.state.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-
-            // We do not care about other states here, because this encompasses all
-            // other options that epoll will update us with.
-            let io_state = guard.deref_mut();
-            *io_state = IoState::ReArmRW;
-        } // Mutex unlock
-        return;
-    }
-
+/// Handles an EPOLLOUT event. An empty buffer is sent down the tx line to
+/// force whatever was left in the tx_buffer into the kernel's outbound buffer.
+unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
+    let err;
     { // Mutex lock
-        // If we're in a state of ShouldClose, no need to worry
-        // about any other operations...
-        let mut event_guard = match arc_connection.event.lock() {
+        let _ = match arc_connection.tx_mutex.lock() {
             Ok(g) => g,
             Err(p) => p.into_inner()
         };
 
-        let event_state = event_guard.deref_mut();
-        if *event_state != IoEvent::ShouldClose {
-            *event_state = IoEvent::ShouldClose;
+        // Get a pointer into UnsafeCell<Stream>
+        let stream_ptr = arc_connection.stream.get();
+
+        let empty = Vec::<u8>::new();
+        let write_result = (*stream_ptr).send(&empty[..]);
+        if write_result.is_ok() {
+            return 0i32;
+        }
+
+        err = write_result.unwrap_err();
+        if err.kind() == ErrorKind::WouldBlock {
+            return libc::EPOLLOUT;
         }
     } // Mutex unlock
+
+    { // Mutex lock
+        // If we're in a state of ShouldClose, no need to worry
+        // about any other operations...
+        let mut err_state = match arc_connection.err_mutex.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        };
+
+        *err_state = Some(err);
+    } // Mutex unlock
+
+    return 0i32;
 }
 
-unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventHandler) {
-    // Get a pointer into UnsafeCell<Stream>
-    let stream_ptr = (*arc_connection).stream.get();
+unsafe fn handle_read_event(arc_connection: Arc<Connection>, handler: EventHandler) -> i32 {
+    let stream_ptr = arc_connection.stream.get();
 
     // Attempt recv
     match (*stream_ptr).recv() {
         Ok(mut queue) => {
-            { // Mutex lock
-                let mut event_guard = match (*arc_connection).event.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner()
-                };
-
-                let event_state = event_guard.deref_mut();
-                *event_state = IoEvent::Waiting;
-            } // Mutex unlock
-
-            { // Mutex lock
-                // Update the state so that the next iteration over the ConnectionSlab
-                // will re-arm this connection in epoll
-                let mut guard = match (*arc_connection).state.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner()
-                };
-
-                let io_state = guard.deref_mut();
-                if *io_state != IoState::ReArmRW {
-                    *io_state = IoState::ReArmR;
-                }
-            } // Mutex unlock
-
-            // Hand off the messages on to the consumer
             for msg in queue.drain(..) {
                 let EventHandler(ptr) = handler;
                 let hydrogen_socket = HydrogenSocket::new(arc_connection.clone());
                 (*ptr).on_data_received(hydrogen_socket, msg);
             }
+            return libc::EPOLLIN;
         }
 
         Err(err) => {
             let kind = err.kind();
             if kind == ErrorKind::WouldBlock {
-                { // Mutex lock
-                    let mut event_guard = match (*arc_connection).event.lock() {
-                        Ok(g) => g,
-                        Err(p) => p.into_inner()
-                    };
-
-                    let event_state = event_guard.deref_mut();
-                    *event_state = IoEvent::Waiting;
-                } // Mutex unlock
-
-                { // Mutex lock
-                    // Update the state so that the next iteration over the ConnectionSlab
-                    // will re-arm this connection in epoll
-                    let mut guard = match (*arc_connection).state.lock() {
-                        Ok(g) => g,
-                        Err(p) => p.into_inner()
-                    };
-
-                    let io_state = guard.deref_mut();
-                    if *io_state != IoState::ReArmRW {
-                        *io_state = IoState::ReArmR;
-                    }
-                } // Mutex unlock
-                return;
+                return libc::EPOLLIN;
             }
 
             if kind != ErrorKind::UnexpectedEof
@@ -606,15 +523,18 @@ unsafe fn handle_data_available(arc_connection: Arc<Connection>, handler: EventH
                 error!("During recv: {}", err);
             }
 
-            // Update the state so that the next iteration over the ConnectionSlab
-            // will remove this connection.
-            let mut guard = match (*arc_connection).event.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
+            { // Mutex lock
+                // If we're in a state of ShouldClose, no need to worry
+                // about any other operations...
+                let mut err_state = match arc_connection.err_mutex.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner()
+                };
 
-            let event_state = guard.deref_mut();
-            *event_state = IoEvent::ShouldClose;
+                *err_state = Some(err);
+            } // Mutex unlock
         }
     };
+
+    return 0i32;
 }
