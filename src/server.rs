@@ -207,10 +207,6 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
     let slab_ptr = (*connection_slab).inner.get();
     let slab_len = (*slab_ptr).len() as isize;
 
-    if slab_len > 0 {
-        trace!("remove_stale_connections count: {}", slab_len);
-    }
-
     let mut x: isize = 0;
     while x < slab_len {
         let connection_opt = (*slab_ptr)[x as usize].as_ref();
@@ -221,7 +217,6 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
         }
 
         let arc_connection = connection_opt.unwrap();
-
         let mut err_state: Option<Error> = None;
         { // Mutex lock
             let mut guard = match arc_connection.err_mutex.lock() {
