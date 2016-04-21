@@ -547,7 +547,7 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
                 && kind != ErrorKind::ConnectionReset
                 && kind != ErrorKind::ConnectionAborted
             {
-                error!("During recv: {}", err);
+                error!("Unexpected during recv: {}", err);
             }
 
             { // Mutex lock
@@ -562,8 +562,6 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
             } // Mutex unlock
         }
     };
-
-    trace!("Unexpected error occured, returning bitflags: {}", -1i32);
 
     return -1i32;
 }
