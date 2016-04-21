@@ -226,13 +226,14 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 
             if (&mut *guard).is_some() {
                 let err_kind = (&mut *guard).as_ref().unwrap().kind();
-                err_state = Some(Error::new(err_kind, "Unknown desc (Previously Unwrapped)"));
+                let err_desc = (&mut *guard).as_ref().unwrap().description();
+                err_state = Some(Error::new(err_kind, err_desc));
             }
         } // Mutex unlock
 
         match err_state {
             Some(err) => {
-                let arc_connection = (*slab_ptr).remove(x as usize).unwrap();
+                let arc_connection = (*slab_ptr).remove((x - 1) as usize).unwrap();
 
                 // Inform kernel we're done
                 close_connection(&arc_connection);
