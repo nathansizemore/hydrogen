@@ -115,6 +115,7 @@ impl HydrogenSocket {
 
         let err;
         { // Mutex lock
+            trace!("hsocket.tx_mutex lock");
             let _ = match self.arc_connection.tx_mutex.lock() {
                 Ok(g) => g,
                 Err(p) => p.into_inner()
@@ -130,6 +131,8 @@ impl HydrogenSocket {
             }
 
             err = write_result.unwrap_err();
+            
+            trace!("hsocket.tx_mutex unlock");
         } // Mutex unlock
 
         match err.kind() {
@@ -144,11 +147,15 @@ impl HydrogenSocket {
             _ => {
                 trace!("Unexpected err occured during send");
                 { // Mutex lock
+                    trace!("hsocket.err_mutex lock");
+
                     let mut err_state = match self.arc_connection.err_mutex.lock() {
                         Ok(g) => g,
                         Err(p) => p.into_inner()
                     };
                     *err_state = Some(err);
+
+                    trace!("hsocket.err_mutex unlock");
                 } // Mutex unlock
             }
         }

@@ -207,6 +207,10 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
     let slab_ptr = (*connection_slab).inner.get();
     let slab_len = (*slab_ptr).len() as isize;
 
+    if slab_len > 0 {
+        trace!("remove_stale_connections count: {}", slab_len);
+    }
+
     let mut x: isize = 0;
     while x < slab_len {
         let connection_opt = (*slab_ptr)[x as usize].as_ref();
@@ -225,11 +229,9 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
                 Err(p) => p.into_inner()
             };
 
-            //let err_opt = guard.deref_mut();
             if (&mut *guard).is_some() {
                 let err_kind = (&mut *guard).as_ref().unwrap().kind();
-                let err_desc = (&mut *guard).as_ref().unwrap().description();
-                err_state = Some(Error::new(err_kind, err_desc));
+                err_state = Some(Error::new(err_kind, "Unknown desc (Previously Unwrapped)"));
             }
         } // Mutex unlock
 
