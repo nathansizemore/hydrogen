@@ -111,11 +111,8 @@ impl HydrogenSocket {
     }
 
     pub fn send(&self, buf: &[u8]) {
-        trace!("sending...");
-
         let err;
         { // Mutex lock
-            trace!("hsocket.tx_mutex lock");
             let _ = match self.arc_connection.tx_mutex.lock() {
                 Ok(g) => g,
                 Err(p) => p.into_inner()
@@ -126,18 +123,16 @@ impl HydrogenSocket {
                 (*stream_ptr).send(buf)
             };
             if write_result.is_ok() {
-                trace!("Send ok");
+                trace!("HydrogenSocket.send OK");
                 return;
             }
 
             err = write_result.unwrap_err();
-            
-            trace!("hsocket.tx_mutex unlock");
         } // Mutex unlock
 
         match err.kind() {
             ErrorKind::WouldBlock => {
-                trace!("Write received WouldBlock");
+                trace!("HydrogenSocket.send received WouldBlock");
 
                 let execute = self.rearm_fn;
                 unsafe {
@@ -145,17 +140,14 @@ impl HydrogenSocket {
                 }
             }
             _ => {
-                trace!("Unexpected err occured during send");
+                trace!("HydrogenSocket.send received err");
+                
                 { // Mutex lock
-                    trace!("hsocket.err_mutex lock");
-
                     let mut err_state = match self.arc_connection.err_mutex.lock() {
                         Ok(g) => g,
                         Err(p) => p.into_inner()
                     };
                     *err_state = Some(err);
-
-                    trace!("hsocket.err_mutex unlock");
                 } // Mutex unlock
             }
         }
