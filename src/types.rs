@@ -86,6 +86,17 @@ pub struct HydrogenSocket {
     rearm_fn: unsafe fn(RawFd, &Arc<Connection>, i32)
 }
 
+impl Clone for HydrogenSocket {
+    fn clone(&self) -> HydrogenSocket {
+        let fn_ptr = self.rearm_fn;
+        HydrogenSocket {
+            epfd: self.epfd,
+            arc_connection: self.arc_connection.clone(),
+            rearm_fn: fn_ptr
+        }
+    }
+}
+
 impl HydrogenSocket {
     pub fn new(arc_connection: Arc<Connection>,
                epfd: RawFd,
