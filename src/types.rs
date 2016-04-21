@@ -6,11 +6,12 @@
 // http://mozilla.org/MPL/2.0/.
 
 
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::cell::UnsafeCell;
 use std::sync::{Arc, Mutex};
 use std::os::unix::io::{RawFd, AsRawFd};
 
+use libc;
 use simple_slab::Slab;
 
 use super::{Stream, Handler};
@@ -77,60 +78,63 @@ impl Clone for EventHandler {
 }
 
 pub struct HydrogenSocket {
+    /// Epoll fd
+    epfd: RawFd,
     /// The connection this socket represents
-    arc_connection: Arc<Connection>
+    arc_connection: Arc<Connection>,
+    /// Function responsible for re-arming fd in epoll instance
+    rearm_fn: unsafe fn(RawFd, &Arc<Connection>, i32)
 }
 
 impl HydrogenSocket {
-    pub fn new(arc_connection: Arc<Connection>) -> HydrogenSocket {
+    pub fn new(arc_connection: Arc<Connection>,
+               epfd: RawFd,
+               rearm_fn: unsafe fn(RawFd, &Arc<Connection>, i32))
+               -> HydrogenSocket
+    {
         HydrogenSocket {
-            arc_connection: arc_connection
+            epfd: epfd,
+            arc_connection: arc_connection,
+            rearm_fn: rearm_fn
         }
     }
 
     pub fn send(&self, buf: &[u8]) {
-        let _ = match self.arc_connection.tx_mutex.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner()
-        };
+        let err;
+        { // Mutex lock
+            let _ = match self.arc_connection.tx_mutex.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner()
+            };
 
-        let stream_ptr = self.arc_connection.stream.get();
-        let write_result = unsafe {
-            (*stream_ptr).send(buf)
-        };
-        if write_result.is_ok() {
-            return;
+            let stream_ptr = self.arc_connection.stream.get();
+            let write_result = unsafe {
+                (*stream_ptr).send(buf)
+            };
+            if write_result.is_ok() {
+                return;
+            }
+
+            err = write_result.unwrap_err();
+        } // Mutex unlock
+
+        match err.kind() {
+            ErrorKind::WouldBlock => {
+                let execute = self.rearm_fn;
+                unsafe {
+                    execute(self.epfd, &(self.arc_connection), libc::EPOLLOUT);
+                }
+            }
+            _ => {
+                { // Mutex lock
+                    let mut err_state = match self.arc_connection.err_mutex.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner()
+                    };
+                    *err_state = Some(err);
+                } // Mutex unlock
+            }
         }
-
-        // let err = write_result.unwrap_err();
-        // if err.kind() == ErrorKind::WouldBlock {
-        //     { // Mutex lock
-        //         let mut guard = match self.arc_connection.state.lock() {
-        //             Ok(g) => g,
-        //             Err(p) => p.into_inner()
-        //         };
-        //
-        //         // We do not care about other states here, because this encompasses all
-        //         // other options that epoll will update us with.
-        //         let io_state = guard.deref_mut();
-        //         *io_state = IoState::ReArmRW;
-        //     } // Mutex unlock
-        //     return;
-        // }
-        //
-        // { // Mutex lock
-        //     // If we're in a state of ShouldClose, no need to worry
-        //     // about any other operations...
-        //     let mut event_guard = match self.arc_connection.event.lock() {
-        //         Ok(g) => g,
-        //         Err(p) => p.into_inner()
-        //     };
-        //
-        //     let event_state = event_guard.deref_mut();
-        //     if *event_state != IoEvent::ShouldClose {
-        //         *event_state = IoEvent::ShouldClose;
-        //     }
-        // } // Mutex unlock
     }
 }
 

@@ -444,7 +444,7 @@ unsafe fn io_sentinel(epfd: RawFd,
                 if io_event == IoEvent::ReadAvailable
                     || io_event == IoEvent::ReadWriteAvailable
                 {
-                    let flags = handle_read_event(arc_connection.clone(), handler_clone);
+                    let flags = handle_read_event(arc_connection.clone(), handler_clone, epfd);
                     if flags == -1 {
                         return;
                     }
@@ -493,10 +493,14 @@ unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
         *err_state = Some(err);
     } // Mutex unlock
 
-    return 0i32;
+    return -1i32;
 }
 
-unsafe fn handle_read_event(arc_connection: Arc<Connection>, handler: EventHandler) -> i32 {
+unsafe fn handle_read_event(arc_connection: Arc<Connection>,
+                            handler: EventHandler,
+                            epfd: RawFd)
+                            -> i32
+{
     let stream_ptr = arc_connection.stream.get();
 
     // Attempt recv
@@ -504,7 +508,9 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>, handler: EventHandl
         Ok(mut queue) => {
             for msg in queue.drain(..) {
                 let EventHandler(ptr) = handler;
-                let hydrogen_socket = HydrogenSocket::new(arc_connection.clone());
+                let hydrogen_socket = HydrogenSocket::new(arc_connection.clone(),
+                                                          epfd,
+                                                          rearm_connection_in_epoll);
                 (*ptr).on_data_received(hydrogen_socket, msg);
             }
             return libc::EPOLLIN;
@@ -536,5 +542,5 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>, handler: EventHandl
         }
     };
 
-    return 0i32;
+    return -1i32;
 }
