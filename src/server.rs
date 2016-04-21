@@ -307,8 +307,8 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>, flags: i32) {
     trace!("Rearm fd");
-    trace!("Default flags: {}", DEFAULT_EVENTS);
-    trace!("Rearming fd with flags: {}", flags);
+    trace!("Default bitflags: {}", DEFAULT_EVENTS as u32);
+    trace!("Adding flags: {}", flags as u32);
 
     let fd = arc_connection.fd;
     let events = DEFAULT_EVENTS | flags;
@@ -492,7 +492,7 @@ unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
 
         err = write_result.unwrap_err();
         if err.kind() == ErrorKind::WouldBlock {
-            trace!("Write returned WouldBlock, returning bitflag: {}", libc::EPOLLOUT);
+            trace!("Write returned WouldBlock, returning bitflags: {}", libc::EPOLLOUT as u32);
             return libc::EPOLLOUT;
         }
     } // Mutex unlock
@@ -529,7 +529,7 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
                 (*ptr).on_data_received(hydrogen_socket, msg);
             }
 
-            trace!("Read and processing complete. Returnig biflags: {}", libc::EPOLLIN);
+            trace!("Read and processing complete. Returning biflags: {}", libc::EPOLLIN as u32);
 
             return libc::EPOLLIN;
         }
@@ -537,7 +537,7 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
         Err(err) => {
             let kind = err.kind();
             if kind == ErrorKind::WouldBlock {
-                trace!("Read returned WouldBlock. Returning bitflags: {}", libc::EPOLLIN);
+                trace!("Read returned WouldBlock. Returning bitflags: {}", libc::EPOLLIN as u32);
 
                 return libc::EPOLLIN;
             }
