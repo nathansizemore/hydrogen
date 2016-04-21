@@ -309,6 +309,8 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>, flags: i32) {
+    trace!("Rearm fd");
+    trace!("Default flags: {}", DEFAULT_EVENTS);
     trace!("Rearming fd with flags: {}", flags);
 
     let fd = arc_connection.fd;
@@ -487,18 +489,18 @@ unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
         let empty = Vec::<u8>::new();
         let write_result = (*stream_ptr).send(&empty[..]);
         if write_result.is_ok() {
+            trace!("Write backlog completed bitflag: {}", 0i32);
             return 0i32;
         }
 
         err = write_result.unwrap_err();
         if err.kind() == ErrorKind::WouldBlock {
+            trace!("Write returned WouldBlock, returning bitflag: {}", libc::EPOLLOUT);
             return libc::EPOLLOUT;
         }
     } // Mutex unlock
 
     { // Mutex lock
-        // If we're in a state of ShouldClose, no need to worry
-        // about any other operations...
         let mut err_state = match arc_connection.err_mutex.lock() {
             Ok(g) => g,
             Err(p) => p.into_inner()
@@ -529,12 +531,17 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
                                                           rearm_connection_in_epoll);
                 (*ptr).on_data_received(hydrogen_socket, msg);
             }
+
+            trace!("Read and processing complete. Returnig biflags: {}", libc::EPOLLIN);
+
             return libc::EPOLLIN;
         }
 
         Err(err) => {
             let kind = err.kind();
             if kind == ErrorKind::WouldBlock {
+                trace!("Read returned WouldBlock. Returning bitflags: {}", libc::EPOLLIN);
+
                 return libc::EPOLLIN;
             }
 
@@ -557,6 +564,8 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
             } // Mutex unlock
         }
     };
+
+    trace!("Unexpected error occured, returning bitflags: {}", -1i32);
 
     return -1i32;
 }
