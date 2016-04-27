@@ -31,6 +31,7 @@ mod config;
 pub trait Stream : AsRawFd + Send + Sync {
     fn recv(&mut self) -> Result<Vec<Vec<u8>>, Error>;
     fn send(&mut self, buf: &[u8]) -> Result<(), Error>;
+    fn shutdown(&mut self) -> Result<(), Error>;
 }
 
 pub trait Handler {

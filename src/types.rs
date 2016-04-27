@@ -141,7 +141,7 @@ impl HydrogenSocket {
             }
             _ => {
                 trace!("HydrogenSocket.send received err");
-                
+
                 { // Mutex lock
                     let mut err_state = match self.arc_connection.err_mutex.lock() {
                         Ok(g) => g,
@@ -150,6 +150,13 @@ impl HydrogenSocket {
                     *err_state = Some(err);
                 } // Mutex unlock
             }
+        }
+    }
+
+    pub fn shutdown(&mut self) -> Result<(), Error> {
+        let stream_ptr = self.arc_connection.stream.get();
+        unsafe {
+            (*stream_ptr).shutdown()
         }
     }
 }
