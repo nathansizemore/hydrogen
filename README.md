@@ -97,11 +97,6 @@ fn main() {
 ~~~
 
 
-## To-dos
-* benchmarks
-* docs
-
-
 ## Author
 
 Nathan Sizemore, nathanrsizemore@gmail.com
