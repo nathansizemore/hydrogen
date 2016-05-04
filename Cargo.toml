@@ -3,10 +3,12 @@ name = "hydrogen"
 version = "0.1.0"
 authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
 description = "non-blocking epoll tcp socket lib"
-repository = "https://github.com/nathansizemore/hydrogen"
-readme = "README.md"
 keywords = ["epoll", "non-blocking", "socket-server"]
-license = "MPL 2.0"
+readme = "README.md"
+license = "MPL-2.0"
+repository = "https://github.com/nathansizemore/hydrogen"
+documentation = "https://nathansizemore.github.io/hydrogen/hydrogen/index.html"
+
 
 [lib]
 name = "hydrogen"
