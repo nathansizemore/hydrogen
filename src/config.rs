@@ -6,14 +6,14 @@
 // http://mozilla.org/MPL/2.0/.
 
 
+/// Configuration options for server
 pub struct Config {
     /// Address to bind to
     pub addr: String,
     /// Port to bind to
     pub port: u16,
-    /// The maximum number of threads available to hydrogen
-    /// not including the two needed for new connection handling
-    /// and main event loop.
+    /// The number of threads to use for I/O handling.
+    /// The lib itself makes use of 3 threads.
     pub max_threads: usize,
     /// The amount of pre-allocated slab space for connections.
     /// This should be, roughly, the maximum amount of concurrent

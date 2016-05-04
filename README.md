@@ -1,6 +1,11 @@
 # hydrogen [<img src="https://travis-ci.org/nathansizemore/hydrogen.png?branch=develop">][travis-badge]
 
-hydrogen is a non-blocking TCP socket lib built atop [epoll][epoll-man-page] with performance, concurrency, and scalability as its main priorities. It takes care of the tedious connection and I/O marshaling across threads, and leaves the specifics of I/O reading and writing up the consumer, through trait implementations.
+[Documentation][docs]
+
+hydrogen is a non-blocking TCP socket lib built atop [epoll][epoll-man-page] with performance,
+concurrency, and scalability as its main priorities. It takes care of the tedious connection and
+I/O marshaling across threads, and leaves the specifics of I/O reading and writing up the consumer,
+through trait implementations.
 
 
 ## Example Usage
@@ -39,14 +44,14 @@ impl HydrogenStream for Stream {
         }
     }
 
-    // This method is called when a previous attempt to write has returned `ErrorKind::WouldBlock` 
+    // This method is called when a previous attempt to write has returned `ErrorKind::WouldBlock`
     // and epoll has reported that the socket is now writable.
     fn send(&mut self, buf: &[u8]) -> Result<(), Error> {
         let frame = SimpleFrame::new(buf);
         self.inner.nb_send(&frame)
     }
 
-    // This method is called when connection has been reported as reset by epoll, or when any 
+    // This method is called when connection has been reported as reset by epoll, or when any
     // `std::io::Error` has been returned.
     fn shutdown(&mut self) -> Result<(), Error> {
         self.inner.shutdown()
@@ -75,7 +80,7 @@ impl hydrogen::Handler for Server {
     }
 
     fn on_connection_removed(&mut self, fd: RawFd, err: Error) {
-        // Called when a connection has been removed from the watch list, with the 
+        // Called when a connection has been removed from the watch list, with the
         // `std::io::Error` as the reason removed.
     }
 }
@@ -108,4 +113,5 @@ hydrogen is available under the MPL-2.0 license. See the LICENSE file for more i
 
 
 [travis-badge]: https://travis-ci.org/nathansizemore/hydrogen
-[epoll-man-page]: http://google.com
+[docs]: https://nathansizemore.github.io/hydrogen/hydrogen/index.html
+[epoll-man-page]: http://man7.org/linux/man-pages/man7/epoll.7.html

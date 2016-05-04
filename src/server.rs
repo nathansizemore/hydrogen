@@ -43,6 +43,9 @@ const DEFAULT_EVENTS: i32 = libc::EPOLLIN |
 // Maximum number of events returned from epoll_wait
 const MAX_EVENTS: i32 = 100;
 
+// Useful to keep from passing a copy of a RawFd everywhere
+static mut epfd: RawFd = 0 as RawFd;
+
 
 pub fn begin(handler: Box<Handler>, cfg: Config) {
     info!("Starting server...");
@@ -165,7 +168,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     }
 
     // Epoll instance
-    let epfd = result;
+    epfd = result;
     info!("Epoll instance created with fd: {}", epfd);
 
     info!("Creating I/O threadpool with {} threads", threads);
@@ -183,7 +186,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     thread::Builder::new()
         .name("I/O Sentinel".to_string())
         .spawn(move || {
-            io_sentinel(epfd, io_queue, t_pool_clone, handler_clone)
+            io_sentinel(io_queue, t_pool_clone, handler_clone)
         })
         .unwrap();
 
@@ -197,7 +200,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
         remove_stale_connections(&connection_slab, &thread_pool, &handler);
 
         // Insert any newly received connections into the connection_slab
-        insert_new_connections(&new_connections, &connection_slab, epfd);
+        insert_new_connections(&new_connections, &connection_slab);
 
         // Check for any new events
         let result = libc::epoll_wait(epfd, event_buffer.as_mut_ptr(), MAX_EVENTS, MAX_WAIT);
@@ -282,8 +285,7 @@ unsafe fn close_connection(connection: &Arc<Connection>) {
 
 /// Transfers Connections from the new_connections slab to the "main" connection_slab.
 unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
-                                 connection_slab: &ConnectionSlab,
-                                 epfd: RawFd)
+                                 connection_slab: &ConnectionSlab)
 {
     let mut new_slab = match new_connections.lock() {
         Ok(g) => g,
@@ -296,12 +298,12 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
         let connection = (&mut *new_slab).remove(0).unwrap();
         let arc_connection = Arc::new(connection);
         (*arc_main_slab).insert(arc_connection.clone());
-        add_connection_to_epoll(epfd, &arc_connection);
+        add_connection_to_epoll(&arc_connection);
     }
 }
 
 /// Adds a new connection to the epoll interest list.
-unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
+unsafe fn add_connection_to_epoll(arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
     info!("Adding fd {} to epoll", fd);
     let result = libc::epoll_ctl(epfd,
@@ -323,7 +325,7 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 }
 
 /// Re-arms a connection in the epoll interest list with the event mask.
-unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>, flags: i32) {
+unsafe fn rearm_connection_in_epoll(arc_connection: &Arc<Connection>, flags: i32) {
     let fd = arc_connection.fd;
     let events = DEFAULT_EVENTS | flags;
 
@@ -428,11 +430,7 @@ unsafe fn find_connection_from_fd(fd: RawFd,
     Err(())
 }
 
-unsafe fn io_sentinel(epfd: RawFd,
-                      arc_io_queue: IoQueue,
-                      thread_pool: ThreadPool,
-                      handler: EventHandler)
-{
+unsafe fn io_sentinel(arc_io_queue: IoQueue, thread_pool: ThreadPool, handler: EventHandler) {
     info!("Starting I/O Sentinel");
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
@@ -475,14 +473,14 @@ unsafe fn io_sentinel(epfd: RawFd,
                 if io_event == IoEvent::ReadAvailable
                     || io_event == IoEvent::ReadWriteAvailable
                 {
-                    let flags = handle_read_event(arc_connection.clone(), handler_clone, epfd);
+                    let flags = handle_read_event(arc_connection.clone(), handler_clone);
                     if flags == -1 {
                         return;
                     }
                     rearm_events |= flags;
                 }
 
-                rearm_connection_in_epoll(epfd, &arc_connection, rearm_events);
+                rearm_connection_in_epoll(&arc_connection, rearm_events);
             });
         }
     }
@@ -528,11 +526,7 @@ unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
     return -1i32;
 }
 
-unsafe fn handle_read_event(arc_connection: Arc<Connection>,
-                            handler: EventHandler,
-                            epfd: RawFd)
-                            -> i32
-{
+unsafe fn handle_read_event(arc_connection: Arc<Connection>, handler: EventHandler) -> i32 {
     trace!("Handling read event");
     let stream_ptr = arc_connection.stream.get();
 
@@ -543,7 +537,6 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
             for msg in queue.drain(..) {
                 let EventHandler(ptr) = handler;
                 let hydrogen_socket = HydrogenSocket::new(arc_connection.clone(),
-                                                          epfd,
                                                           rearm_connection_in_epoll);
                 (*ptr).on_data_received(hydrogen_socket, msg);
             }

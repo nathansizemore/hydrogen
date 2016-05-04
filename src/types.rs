@@ -77,20 +77,18 @@ impl Clone for EventHandler {
     }
 }
 
+/// Thread-safe wrapper for consumer interaction with streams.
 pub struct HydrogenSocket {
-    /// Epoll fd
-    epfd: RawFd,
     /// The connection this socket represents
     arc_connection: Arc<Connection>,
     /// Function responsible for re-arming fd in epoll instance
-    rearm_fn: unsafe fn(RawFd, &Arc<Connection>, i32)
+    rearm_fn: unsafe fn(&Arc<Connection>, i32)
 }
 
 impl Clone for HydrogenSocket {
     fn clone(&self) -> HydrogenSocket {
         let fn_ptr = self.rearm_fn;
         HydrogenSocket {
-            epfd: self.epfd,
             arc_connection: self.arc_connection.clone(),
             rearm_fn: fn_ptr
         }
@@ -99,12 +97,10 @@ impl Clone for HydrogenSocket {
 
 impl HydrogenSocket {
     pub fn new(arc_connection: Arc<Connection>,
-               epfd: RawFd,
-               rearm_fn: unsafe fn(RawFd, &Arc<Connection>, i32))
+               rearm_fn: unsafe fn(&Arc<Connection>, i32))
                -> HydrogenSocket
     {
         HydrogenSocket {
-            epfd: epfd,
             arc_connection: arc_connection,
             rearm_fn: rearm_fn
         }
@@ -136,7 +132,7 @@ impl HydrogenSocket {
 
                 let execute = self.rearm_fn;
                 unsafe {
-                    execute(self.epfd, &(self.arc_connection), libc::EPOLLOUT);
+                    execute(&(self.arc_connection), libc::EPOLLOUT);
                 }
             }
             _ => {
