@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["ThreadPool","A thread pool used to execute functions in parallel."]]});

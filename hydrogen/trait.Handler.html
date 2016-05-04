@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Handler` trait in crate `hydrogen`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Handler">
+
+    <title>hydrogen::Handler - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='index.html'>hydrogen</a></p><script>window.sidebarCurrent = {name: 'Handler', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content trait">
+<h1 class='fqn'><span class='in-band'>Trait <a href='index.html'>hydrogen</a>::<wbr><a class='trait' href=''>Handler</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-492' class='srclink' href='../src/hydrogen/src/lib.rs.html#155-173' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Handler {
+    fn <a href='#tymethod.on_server_created' class='fnname'>on_server_created</a>(&amp;mut self, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>);
+    fn <a href='#tymethod.on_new_connection' class='fnname'>on_new_connection</a>(&amp;mut self, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html' title='alloc::arc::Arc'>Arc</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/core/cell/struct.UnsafeCell.html' title='core::cell::UnsafeCell'>UnsafeCell</a>&lt;<a class='trait' href='../hydrogen/trait.Stream.html' title='hydrogen::Stream'>Stream</a>&gt;&gt;;
+    fn <a href='#tymethod.on_data_received' class='fnname'>on_data_received</a>(&amp;mut self, socket: <a class='struct' href='../hydrogen/struct.HydrogenSocket.html' title='hydrogen::HydrogenSocket'>HydrogenSocket</a>, buf: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;);
+    fn <a href='#tymethod.on_connection_removed' class='fnname'>on_connection_removed</a>(&amp;mut self, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>, err: <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>);
+}</pre><div class='docblock'><p>Events reported to lib consumer.</p>
+</div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.on_server_created' class='method stab '><code>fn <a href='#tymethod.on_server_created' class='fnname'>on_server_created</a>(&amp;mut self, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>)</code></h3><div class='docblock'><p>This method is called once the listening RawFd has been created.</p>
+
+<p>It should be used to set/remove any flags on the underlying RawFd before <code>listen</code> is
+called on the fd.</p>
+</div><h3 id='tymethod.on_new_connection' class='method stab '><code>fn <a href='#tymethod.on_new_connection' class='fnname'>on_new_connection</a>(&amp;mut self, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>) -&gt; <a class='struct' href='https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html' title='alloc::arc::Arc'>Arc</a>&lt;<a class='struct' href='https://doc.rust-lang.org/nightly/core/cell/struct.UnsafeCell.html' title='core::cell::UnsafeCell'>UnsafeCell</a>&lt;<a class='trait' href='../hydrogen/trait.Stream.html' title='hydrogen::Stream'>Stream</a>&gt;&gt;</code></h3><div class='docblock'><p>This method is called whenever <code>accept</code> returns a new TCP connection.</p>
+
+<p>The returned trait object is added to the connection pool and the epoll interest list.</p>
+</div><h3 id='tymethod.on_data_received' class='method stab '><code>fn <a href='#tymethod.on_data_received' class='fnname'>on_data_received</a>(&amp;mut self, socket: <a class='struct' href='../hydrogen/struct.HydrogenSocket.html' title='hydrogen::HydrogenSocket'>HydrogenSocket</a>, buf: <a class='struct' href='https://doc.rust-lang.org/nightly/collections/vec/struct.Vec.html' title='collections::vec::Vec'>Vec</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u8.html'>u8</a>&gt;)</code></h3><div class='docblock'><p>This method is called whenever the <code>recv</code> call returns an Ok(_) result.</p>
+</div><h3 id='tymethod.on_connection_removed' class='method stab '><code>fn <a href='#tymethod.on_connection_removed' class='fnname'>on_connection_removed</a>(&amp;mut self, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>, err: <a class='struct' href='https://doc.rust-lang.org/nightly/std/io/error/struct.Error.html' title='std::io::error::Error'>Error</a>)</code></h3><div class='docblock'><p>This method is called after a stream has been removed from the connection poll and epoll
+interest list, with the <code>std::io::Error</code> as the reason removed.</p>
+
+<p>At the time of this call, the underlying fd has been shutdown and closed. No system level
+shutdown is needed, only application level cleanup.</p>
+</div></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    </ul><script type="text/javascript" async
+                              src="../implementors/hydrogen/trait.Handler.js">
+                      </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "hydrogen";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

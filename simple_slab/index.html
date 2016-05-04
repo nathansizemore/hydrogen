@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `simple_slab` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, simple_slab">
+
+    <title>simple_slab - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'></p><script>window.sidebarCurrent = {name: 'simple_slab', ty: 'mod', relpath: '../'};</script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>simple_slab</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-0' class='srclink' href='../src/simple_slab/lib.rs.html#9-216' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>simple_slab provides a fast, minimal, slab allocator.</p>
+
+<h2 id='usage' class='section-header'><a href='#usage'>Usage</a></h2>
+<pre class='rust rust-example-rendered'>
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>simple_slab</span>;
+
+<span class='kw'>use</span> <span class='ident'>simple_slab</span>::<span class='ident'>Slab</span>;
+
+<span class='kw'>fn</span> <span class='ident'>main</span>() {
+    <span class='kw'>const</span> <span class='ident'>MAX_ELEMS</span>: <span class='ident'>usize</span> <span class='op'>=</span> <span class='number'>100000</span>;
+
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>slab</span> <span class='op'>=</span> <span class='ident'>Slab</span>::<span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;</span>::<span class='ident'>new</span>(<span class='ident'>MAX_ELEMS</span>);
+
+    <span class='comment'>// Insertion</span>
+    <span class='kw'>for</span> <span class='ident'>num</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>MAX_ELEMS</span> {
+        <span class='ident'>slab</span>.<span class='ident'>insert</span>(<span class='ident'>num</span> <span class='kw'>as</span> <span class='ident'>u32</span>);
+    }
+
+    <span class='comment'>// Traversal</span>
+    <span class='kw'>for</span> <span class='ident'>offset</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>slab</span>.<span class='ident'>len</span>() {
+        <span class='kw'>match</span> <span class='ident'>slab</span>[<span class='ident'>offset</span>] {
+            <span class='prelude-val'>Some</span>(<span class='ident'>num</span>) <span class='op'>=&gt;</span> {
+                <span class='comment'>// Stuff...</span>
+            }
+            <span class='prelude-val'>None</span> <span class='op'>=&gt;</span> {
+                <span class='comment'>// Stuff...</span>
+            }
+        }
+    }
+
+    <span class='comment'>// Iteration</span>
+    <span class='kw'>for</span> <span class='ident'>num</span> <span class='kw'>in</span> <span class='ident'>slab</span>.<span class='ident'>iter</span>() {
+        <span class='comment'>// Stuff...</span>
+    }
+
+    <span class='comment'>// Removal</span>
+    <span class='kw'>for</span> <span class='ident'>offset</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>slab</span>.<span class='ident'>len</span>() {
+        <span class='kw'>let</span> <span class='ident'>num</span> <span class='op'>=</span> <span class='ident'>slab</span>.<span class='ident'>remove</span>(<span class='ident'>offset</span>).<span class='ident'>unwrap</span>();
+    }
+}</pre>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Slab.html'
+                               title='simple_slab::Slab'>Slab</a></td>
+                        <td class='docblock short'>
+                             <p>Pre-allocated chunk of memory sized specifically for <code>T</code></p>
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.SlabIter.html'
+                               title='simple_slab::SlabIter'>SlabIter</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.SlabMutIter.html'
+                               title='simple_slab::SlabMutIter'>SlabMutIter</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "simple_slab";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script defer src="../search-index.js"></script>
+</body>
+</html>

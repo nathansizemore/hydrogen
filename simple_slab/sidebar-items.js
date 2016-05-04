@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Slab","Pre-allocated chunk of memory sized specifically for `T`"],["SlabIter",""],["SlabMutIter",""]]});
