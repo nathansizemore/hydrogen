@@ -45,6 +45,8 @@ const MAX_EVENTS: i32 = 100;
 
 
 pub fn begin(handler: Box<Handler>, cfg: Config) {
+    info!("Starting server...");
+
     // Wrap handler in something we can share between threads
     let event_handler = EventHandler(Box::into_raw(handler));
 
@@ -79,10 +81,10 @@ pub fn begin(handler: Box<Handler>, cfg: Config) {
             .unwrap()
     };
     let _ = listener_thread.join();
-
 }
 
 unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler: EventHandler) {
+    info!("Starting incoming TCP connection listener...");
     let listener_result = TcpListener::bind((&cfg.addr[..], cfg.port));
     if listener_result.is_err() {
         let err = listener_result.unwrap_err();
@@ -93,6 +95,8 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler
     let listener = listener_result.unwrap();
     setup_listener_options(&listener, handler.clone());
 
+    info!("Incoming TCP conecction listener started");
+
     for accept_attempt in listener.incoming() {
         match accept_attempt {
             Ok(tcp_stream) => handle_new_connection(tcp_stream, &new_connections, handler.clone()),
@@ -100,10 +104,13 @@ unsafe fn listener_loop(cfg: Config, new_connections: NewConnectionSlab, handler
         };
     }
 
+    debug!("Dropping TcpListener");
+
     drop(listener);
 }
 
 unsafe fn setup_listener_options(listener: &TcpListener, handler: EventHandler) {
+    info!("Setting up listener options");
     let fd = listener.as_raw_fd();
     let EventHandler(handler_ptr) = handler;
 
@@ -114,6 +121,7 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream,
                                 new_connections: &NewConnectionSlab,
                                 handler: EventHandler)
 {
+    info!("New connection received");
     // Take ownership of tcp_stream's underlying file descriptor
     let fd = tcp_stream.into_raw_fd();
 
@@ -144,8 +152,10 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
                      handler: EventHandler,
                      threads: usize)
 {
+    info!("Event loop starting...");
     const MAX_WAIT: i32 = 1000; // Milliseconds
 
+    info!("Creating epoll instance...");
     // Attempt to create an epoll instance
     let result = libc::epoll_create(1);
     if result < 0 {
@@ -156,6 +166,9 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
 
     // Epoll instance
     let epfd = result;
+    info!("Epoll instance created with fd: {}", epfd);
+
+    info!("Creating I/O threadpool with {} threads", threads);
 
     // ThreadPool with user specified number of threads
     let thread_pool = ThreadPool::new(threads);
@@ -178,6 +191,7 @@ unsafe fn event_loop(new_connections: NewConnectionSlab,
     let mut event_buffer = Vec::<libc::epoll_event>::with_capacity(MAX_EVENTS as usize);
     event_buffer.set_len(MAX_EVENTS as usize);
 
+    info!("Starting epoll_wait loop...");
     loop {
         // Remove any connections in an error'd state.
         remove_stale_connections(&connection_slab, &thread_pool, &handler);
@@ -233,6 +247,7 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 
         match err_state {
             Some(err) => {
+                trace!("Found stale connection");
                 let arc_connection = (*slab_ptr).remove((x - 1) as usize).unwrap();
 
                 // Inform kernel we're done
@@ -256,11 +271,12 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 /// Closes the connection's underlying file descriptor
 unsafe fn close_connection(connection: &Arc<Connection>) {
     let fd = (*connection).fd;
+    info!("Closing fd: {}", fd);
 
     let result = libc::close(fd);
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
-        error!("Error closing fd: {}", err);
+        error!("Closing fd: {}    {}", fd, err);
     }
 }
 
@@ -287,6 +303,7 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
 /// Adds a new connection to the epoll interest list.
 unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
+    info!("Adding fd {} to epoll", fd);
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_ADD,
                        fd,
@@ -294,7 +311,7 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 
    if result < 0 {
        let err = Error::from_raw_os_error(errno().0 as i32);
-       error!("Adding fd to epoll: {}", err);
+       error!("Adding fd: {} to epoll:   {}", fd, err);
 
        let mut err_state = match arc_connection.err_mutex.lock() {
            Ok(g) => g,
@@ -307,14 +324,10 @@ unsafe fn add_connection_to_epoll(epfd: RawFd, arc_connection: &Arc<Connection>)
 
 /// Re-arms a connection in the epoll interest list with the event mask.
 unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection>, flags: i32) {
-    trace!("Rearm fd");
-    trace!("Default bitflags: {}", DEFAULT_EVENTS as u32);
-    trace!("Adding flags: {}", flags as u32);
-
     let fd = arc_connection.fd;
     let events = DEFAULT_EVENTS | flags;
 
-    trace!("Fd: {} final event bitmask: {}", fd, events as u32);
+    trace!("EPOLL_CTL_MOD   fd: {}    flags: {:#b}", fd, (flags as u32));
 
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_MOD,
@@ -323,7 +336,7 @@ unsafe fn rearm_connection_in_epoll(epfd: RawFd, arc_connection: &Arc<Connection
 
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
-        error!("Re-arming fd in epoll: {}", err);
+        error!("EPOLL_CTL_MOD   fd: {}    {}", fd, err);
 
         let mut err_state = match arc_connection.err_mutex.lock() {
             Ok(g) => g,
@@ -346,11 +359,11 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
         // Locate the connection this event is for
         let fd = event.u64 as RawFd;
 
-        trace!("Received event for fd: {}", fd);
+        trace!("Epoll event for fd: {}    flags: {:#b}", fd, event.events);
 
         let find_result = find_connection_from_fd(fd, connection_slab);
         if find_result.is_err() {
-            error!("Finding fd: {} in connection_slab", fd);
+            error!("Unable to find fd {} in ConnectionSlab", fd);
             continue;
         }
 
@@ -360,6 +373,7 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
         let read_available = (event.events & READ_EVENT) > 0;
         let write_available = (event.events & WRITE_EVENT) > 0;
         if !read_available && !write_available {
+            trace!("Event was neither read nor write: assuming hangup");
             { // Mutex lock
                 let mut err_opt = match arc_connection.err_mutex.lock() {
                     Ok(g) => g,
@@ -372,13 +386,13 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
         }
 
         let io_event = if read_available && write_available {
-            trace!("Event was readable && writable");
+            trace!("Event: RW");
             IoEvent::ReadWriteAvailable
         } else if read_available {
-            trace!("Event is readable");
+            trace!("Event: R");
             IoEvent::ReadAvailable
         } else {
-            trace!("Event is writable");
+            trace!("Event W");
             IoEvent::WriteAvailable
         };
 
@@ -387,7 +401,7 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
             arc_connection: arc_connection
         };
 
-        trace!("Pushing event onto io_queue");
+        trace!("Adding event to queue");
         { // Mutex lock
             let mut io_queue = match arc_io_queue.lock() {
                 Ok(g) => g,
@@ -419,6 +433,7 @@ unsafe fn io_sentinel(epfd: RawFd,
                       thread_pool: ThreadPool,
                       handler: EventHandler)
 {
+    info!("Starting I/O Sentinel");
     // We want to wake up with the same interval consitency as the epoll_wait loop.
     // Plus a few ms for hopeful non-interference from mutex contention.
     let _100ms = 1000000 * 100;
@@ -437,6 +452,10 @@ unsafe fn io_sentinel(epfd: RawFd,
             let empty_queue = Vec::<IoPair>::with_capacity(MAX_EVENTS as usize);
             io_queue = mem::replace(&mut (*queue), empty_queue);
         } // Mutex unlock
+
+        if io_queue.len() > 0 {
+            trace!("Processing {} I/O events", io_queue.len());
+        }
 
         for ref io_pair in io_queue.iter() {
             let io_event = io_pair.event.clone();
@@ -472,8 +491,7 @@ unsafe fn io_sentinel(epfd: RawFd,
 /// Handles an EPOLLOUT event. An empty buffer is sent down the tx line to
 /// force whatever was left in the tx_buffer into the kernel's outbound buffer.
 unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
-    trace!("Handling backlog write event for fd: {}", arc_connection.fd);
-
+    info!("Handling a write backlog event...");
     let err;
     { // Mutex lock
         let _ = match arc_connection.tx_mutex.lock() {
@@ -487,13 +505,13 @@ unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
         let empty = Vec::<u8>::new();
         let write_result = (*stream_ptr).send(&empty[..]);
         if write_result.is_ok() {
-            trace!("Write backlog completed bitflag: {}", 0i32);
+            info!("Cleared backlog");
             return 0i32;
         }
 
         err = write_result.unwrap_err();
         if err.kind() == ErrorKind::WouldBlock {
-            trace!("Write returned WouldBlock, returning bitflags: {}", libc::EPOLLOUT as u32);
+            info!("Backlog still not cleared, returning EPOLLOUT flags for fd");
             return libc::EPOLLOUT;
         }
     } // Mutex unlock
@@ -515,13 +533,13 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
                             epfd: RawFd)
                             -> i32
 {
-    trace!("handling read event");
-
+    trace!("Handling read event");
     let stream_ptr = arc_connection.stream.get();
 
     // Attempt recv
     match (*stream_ptr).recv() {
         Ok(mut queue) => {
+            trace!("Read {} msgs", queue.len());
             for msg in queue.drain(..) {
                 let EventHandler(ptr) = handler;
                 let hydrogen_socket = HydrogenSocket::new(arc_connection.clone(),
@@ -529,17 +547,13 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
                                                           rearm_connection_in_epoll);
                 (*ptr).on_data_received(hydrogen_socket, msg);
             }
-
-            trace!("Read and processing complete. Returning biflags: {}", libc::EPOLLIN as u32);
-
             return libc::EPOLLIN;
         }
 
         Err(err) => {
             let kind = err.kind();
             if kind == ErrorKind::WouldBlock {
-                trace!("Read returned WouldBlock. Returning bitflags: {}", libc::EPOLLIN as u32);
-
+                trace!("ErrorKind::WouldBlock");
                 return libc::EPOLLIN;
             }
 
@@ -547,7 +561,9 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>,
                 && kind != ErrorKind::ConnectionReset
                 && kind != ErrorKind::ConnectionAborted
             {
-                error!("Unexpected during recv: {}", err);
+                error!("Unexpected during recv:   {}", err);
+            } else {
+                info!("Received during read:    {}", err);
             }
 
             { // Mutex lock
