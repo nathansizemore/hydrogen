@@ -29,14 +29,12 @@ use super::{Stream, Handler};
 //
 // EPOLLIN          - Data is available in kernel buffer.
 // EPOLLRDHUP       - Peer closed connection.
-// EPOLLPRI         - Urgent data for read available.
 // EPOLLET          - Register in EdgeTrigger mode.
 // EPOLLONESHOT     - After an event is pulled out with epoll_wait(2) the associated
 //                    file descriptor is internally disabled and no other events will
 //                    be reported by the epoll interface.
 const DEFAULT_EVENTS: i32 = libc::EPOLLIN |
                             libc::EPOLLRDHUP |
-                            libc::EPOLLPRI |
                             libc::EPOLLET |
                             libc::EPOLLONESHOT;
 
