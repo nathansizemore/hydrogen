@@ -122,7 +122,7 @@ unsafe fn handle_new_connection(tcp_stream: TcpStream,
                                 new_connections: &NewConnectionSlab,
                                 handler: EventHandler)
 {
-    info!("New connection received");
+    debug!("New connection received");
     // Take ownership of tcp_stream's underlying file descriptor
     let fd = tcp_stream.into_raw_fd();
 
@@ -272,7 +272,7 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 /// Closes the connection's underlying file descriptor
 unsafe fn close_connection(connection: &Arc<Connection>) {
     let fd = (*connection).fd;
-    info!("Closing fd: {}", fd);
+    debug!("Closing fd: {}", fd);
 
     let result = libc::close(fd);
     if result < 0 {
@@ -303,7 +303,7 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
 /// Adds a new connection to the epoll interest list.
 unsafe fn add_connection_to_epoll(arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
-    info!("Adding fd {} to epoll", fd);
+    debug!("Adding fd {} to epoll", fd);
     let result = libc::epoll_ctl(epfd,
                        libc::EPOLL_CTL_ADD,
                        fd,
@@ -354,6 +354,7 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
 {
     const READ_EVENT: u32 = libc::EPOLLIN as u32;
     const WRITE_EVENT: u32 = libc::EPOLLOUT as u32;
+    const CLOSE_EVENT: u32 = (libc::EPOLLRDHUP | libc::EPOLLERR | libc::EPOLLHUP) as u32;
 
     for event in events.iter() {
         // Locate the connection this event is for
@@ -369,7 +370,21 @@ unsafe fn update_io_events(connection_slab: &ConnectionSlab,
 
         let arc_connection = find_result.unwrap();
 
-        // Event type branch
+        // Error/hangup occurred?
+        let close_event = (event.events & CLOSE_EVENT) > 0;
+        if close_event {
+            { // Mutex lock
+                let mut err_opt = match arc_connection.err_mutex.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner()
+                };
+
+                *err_opt = Some(Error::new(ErrorKind::ConnectionAborted, "ConnectionAborted"));
+            } // Mutex unlock
+            continue;
+        }
+
+        // Read or write branch
         let read_available = (event.events & READ_EVENT) > 0;
         let write_available = (event.events & WRITE_EVENT) > 0;
         if !read_available && !write_available {
@@ -487,7 +502,7 @@ unsafe fn io_sentinel(arc_io_queue: IoQueue, thread_pool: ThreadPool, handler: E
 /// Handles an EPOLLOUT event. An empty buffer is sent down the tx line to
 /// force whatever was left in the tx_buffer into the kernel's outbound buffer.
 unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
-    info!("Handling a write backlog event...");
+    debug!("Handling a write backlog event...");
     let err;
     { // Mutex lock
         let _ = match arc_connection.tx_mutex.lock() {
@@ -501,13 +516,13 @@ unsafe fn handle_write_event(arc_connection: Arc<Connection>) -> i32 {
         let empty = Vec::<u8>::new();
         let write_result = (*stream_ptr).send(&empty[..]);
         if write_result.is_ok() {
-            info!("Cleared backlog");
+            debug!("Cleared backlog");
             return 0i32;
         }
 
         err = write_result.unwrap_err();
         if err.kind() == ErrorKind::WouldBlock {
-            info!("Backlog still not cleared, returning EPOLLOUT flags for fd");
+            debug!("Backlog still not cleared, returning EPOLLOUT flags for fd");
             return libc::EPOLLOUT;
         }
     } // Mutex unlock
@@ -554,7 +569,7 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>, handler: EventHandl
             {
                 error!("Unexpected during recv:   {}", err);
             } else {
-                info!("Received during read:    {}", err);
+                debug!("Received during read:    {}", err);
             }
 
             { // Mutex lock
