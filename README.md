@@ -2,15 +2,36 @@
 
 [Documentation][docs]
 
-hydrogen is a non-blocking TCP socket lib built atop [epoll][epoll-man-page] with performance,
-concurrency, and scalability as its main priorities. It takes care of the tedious connection and
-I/O marshaling across threads, and leaves the specifics of I/O reading and writing up the consumer,
-through trait implementations.
+hydrogen is a non-blocking TCP socket lib built atop [epoll][epoll-man-page] 
+with performance, concurrency, and scalability as its main priorities. It takes 
+care of the tedious connection and I/O marshaling across threads, and leaves 
+the specifics of I/O reading and writing up the consumer, through trait 
+implementations.
+
+---
+
+## Streams
+
+hydrogen works with `Stream` trait Objects so any custom type can be used. 
+[simple-stream][simple-stream-repo] was built in conjunction and offers several 
+stream abstractions and types including Plain and Secured streams with basic 
+and WebSocket framing.
+
+## Multithreaded
+
+hydrogen is multithreaded. It uses one thread for accepting incoming 
+connections, one for updating epoll reported event, and one used for 
+marshalling I/O into a threadpool of a user specified size.
+
+## Slab allocation
+
+The connection pool is managed as a slab, which means traversal times are 
+similar to traversing a Vector, with an insertion and removal time of O(1).
 
 
 ## Example Usage
 
-~~~rust
+``` rust
 extern crate hydrogen;
 extern crate simple_stream as ss;
 
@@ -29,7 +50,7 @@ pub struct Stream {
     inner: Plain<Socket, SimpleFrameBuilder>
 }
 
-impl HydrogenStream for Stream {    
+impl HydrogenStream for Stream {
     // This method is called when epoll reports data is available for reading.
     fn recv(&mut self) -> Result<Vec<Vec<u8>>, Error> {
         match self.inner.nb_recv() {
@@ -94,8 +115,7 @@ fn main() {
         pre_allocated: 100000
     });
 }
-~~~
-
+```
 
 ## Author
 
@@ -110,3 +130,5 @@ hydrogen is available under the MPL-2.0 license. See the LICENSE file for more i
 [travis-badge]: https://travis-ci.org/nathansizemore/hydrogen
 [docs]: https://nathansizemore.github.io/hydrogen/hydrogen/index.html
 [epoll-man-page]: http://man7.org/linux/man-pages/man7/epoll.7.html
+[simple-stream-repo]: https://github.com/nathansizemore/simple-stream
+
