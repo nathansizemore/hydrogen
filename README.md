@@ -2,10 +2,9 @@
 
 [Documentation][docs]
 
-hydrogen is a non-blocking TCP socket lib built atop [epoll][epoll-man-page] 
-with performance, concurrency, and scalability as its main priorities. It takes 
-care of the tedious connection and I/O marshaling across threads, and leaves 
-the specifics of I/O reading and writing up the consumer, through trait 
+hydrogen is a non-blocking TCP socket lib built atop [epoll][epoll-man-page]. 
+It takes care of the tedious connection and I/O marshaling across threads, and 
+leaves the specifics of I/O reading and writing up the consumer, through trait 
 implementations.
 
 ---
