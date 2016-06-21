@@ -220,47 +220,36 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
                                    handler: &EventHandler)
 {
     let slab_ptr = (*connection_slab).inner.get();
-    let slab_len = (*slab_ptr).len() as isize;
 
     let mut x: isize = 0;
-    while x < slab_len {
-        let arc_connection = (*slab_ptr)[x as usize].clone();
-        x += 1;
-
-        let mut err_state: Option<Error> = None;
-        { // Mutex lock
-            let mut guard = match arc_connection.err_mutex.lock() {
-                Ok(g) => g,
-                Err(p) => p.into_inner()
-            };
-
-            if (&mut *guard).is_some() {
-                let err_kind = (&mut *guard).as_ref().unwrap().kind();
-                let err_desc = (&mut *guard).as_ref().unwrap().description();
-                err_state = Some(Error::new(err_kind, err_desc));
+    while x < (*slab_ptr).len() as isize {
+        let err_state = {
+            let state = (*slab_ptr)[x as usize].err_mutex.lock().unwrap();
+            if state.is_some() {
+                let err_kind = (*state).as_ref().unwrap().kind();
+                let err_desc = (*state).as_ref().unwrap().description();
+                Some(Error::new(err_kind, err_desc))
+            } else {
+                None
             }
-        } // Mutex unlock
-
-        match err_state {
-            Some(err) => {
-                trace!("Found stale connection");
-                let arc_connection = (*slab_ptr).remove((x - 1) as usize);
-
-                // Inform kernel we're done
-                close_connection(&arc_connection);
-
-                // Inform the consumer connection is no longer valid
-                let fd = (*arc_connection).fd;
-                let handler_clone = (*handler).clone();
-                thread_pool.execute(move || {
-                    let EventHandler(ptr) = handler_clone;
-                    (*ptr).on_connection_removed(fd, err);
-                });
-
-                x -= 1;
-            }
-            None => { }
         };
+
+        err_state.map(|e| {
+            trace!("Found stale connection");
+
+            let arc_connection = (*slab_ptr).remove(x as usize);
+            close_connection(&arc_connection);
+
+            let fd = arc_connection.fd;
+            let handler_clone = (*handler).clone();
+            thread_pool.execute(move || {
+                let EventHandler(ptr) = handler_clone;
+                (*ptr).on_connection_removed(fd, e);
+            });
+            x -= 1;
+        });
+
+        x += 1;
     }
 }
 
@@ -300,21 +289,24 @@ unsafe fn add_connection_to_epoll(arc_connection: &Arc<Connection>) {
     let fd = (*arc_connection).fd;
     debug!("Adding fd {} to epoll", fd);
     let result = libc::epoll_ctl(epfd,
-                       libc::EPOLL_CTL_ADD,
-                       fd,
-                       &mut libc::epoll_event { events: DEFAULT_EVENTS as u32, u64: fd as u64 });
+                                 libc::EPOLL_CTL_ADD,
+                                 fd,
+                                 &mut libc::epoll_event {
+                                     events: DEFAULT_EVENTS as u32,
+                                     u64: fd as u64
+                                 });
 
-   if result < 0 {
-       let err = Error::from_raw_os_error(errno().0 as i32);
-       error!("Adding fd: {} to epoll:   {}", fd, err);
+    if result < 0 {
+        let err = Error::from_raw_os_error(errno().0 as i32);
+        error!("Adding fd: {} to epoll:   {}", fd, err);
 
-       let mut err_state = match arc_connection.err_mutex.lock() {
-           Ok(g) => g,
-           Err(p) => p.into_inner()
-       };
+        let mut err_state = match arc_connection.err_mutex.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner()
+        };
 
-       *err_state = Some(err);
-   }
+        *err_state = Some(err);
+    }
 }
 
 /// Re-arms a connection in the epoll interest list with the event mask.
@@ -325,9 +317,9 @@ unsafe fn rearm_connection_in_epoll(arc_connection: &Arc<Connection>, flags: i32
     trace!("EPOLL_CTL_MOD   fd: {}    flags: {:#b}", fd, (flags as u32));
 
     let result = libc::epoll_ctl(epfd,
-                       libc::EPOLL_CTL_MOD,
-                       fd,
-                       &mut libc::epoll_event { events: events as u32, u64: fd as u64 });
+                                 libc::EPOLL_CTL_MOD,
+                                 fd,
+                                 &mut libc::epoll_event { events: events as u32, u64: fd as u64 });
 
     if result < 0 {
         let err = Error::from_raw_os_error(errno().0 as i32);
@@ -460,38 +452,38 @@ unsafe fn io_sentinel(arc_io_queue: IoQueue, thread_pool: ThreadPool, handler: E
         } // Mutex unlock
 
         if io_queue.len() > 0 {
-            trace!("Processing {} I/O events", io_queue.len());
-        }
-
-        for ref io_pair in io_queue.iter() {
-            let io_event = io_pair.event.clone();
-            let handler_clone = handler.clone();
-            let arc_connection = io_pair.arc_connection.clone();
-            thread_pool.execute(move || {
-                let mut rearm_events = 0i32;
-                if io_event == IoEvent::WriteAvailable
-                    || io_event == IoEvent::ReadWriteAvailable
-                {
-                    let flags = handle_write_event(arc_connection.clone());
-                    if flags == -1 {
-                        return;
-                    }
-                    rearm_events |= flags;
-                }
-                if io_event == IoEvent::ReadAvailable
-                    || io_event == IoEvent::ReadWriteAvailable
-                {
-                    let flags = handle_read_event(arc_connection.clone(), handler_clone);
-                    if flags == -1 {
-                        return;
-                    }
-                    rearm_events |= flags;
-                }
-
-                rearm_connection_in_epoll(&arc_connection, rearm_events);
-            });
-        }
+        trace!("Processing {} I/O events", io_queue.len());
     }
+
+    for ref io_pair in io_queue.iter() {
+        let io_event = io_pair.event.clone();
+        let handler_clone = handler.clone();
+        let arc_connection = io_pair.arc_connection.clone();
+        thread_pool.execute(move || {
+            let mut rearm_events = 0i32;
+            if io_event == IoEvent::WriteAvailable
+                || io_event == IoEvent::ReadWriteAvailable
+            {
+                let flags = handle_write_event(arc_connection.clone());
+                if flags == -1 {
+                    return;
+                }
+                rearm_events |= flags;
+            }
+            if io_event == IoEvent::ReadAvailable
+                || io_event == IoEvent::ReadWriteAvailable
+            {
+                let flags = handle_read_event(arc_connection.clone(), handler_clone);
+                if flags == -1 {
+                    return;
+                }
+                rearm_events |= flags;
+            }
+
+            rearm_connection_in_epoll(&arc_connection, rearm_events);
+        });
+    }
+}
 }
 
 /// Handles an EPOLLOUT event. An empty buffer is sent down the tx line to
