@@ -1,8 +1,8 @@
 [package]
 name = "hydrogen"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
-description = "non-blocking epoll tcp socket lib"
+description = "Multithreaded Linux TCP socket server using epoll."
 keywords = ["epoll", "non-blocking", "socket-server"]
 readme = "README.md"
 license = "MPL-2.0"
