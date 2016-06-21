@@ -1,6 +1,6 @@
 [package]
 name = "hydrogen"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
 description = "non-blocking epoll tcp socket lib"
 keywords = ["epoll", "non-blocking", "socket-server"]
@@ -14,8 +14,8 @@ documentation = "https://nathansizemore.github.io/hydrogen/hydrogen/index.html"
 name = "hydrogen"
 
 [dependencies]
-log = "^0.3.6"
-libc = "^0.2.11"
+log = "^0.3"
+libc = "^0.2"
 errno = "^0.1.6"
-threadpool = "~1.0.0"
-simple-slab = "^0.1.0"
+threadpool = "~1.0"
+simple-slab = "^0.2"

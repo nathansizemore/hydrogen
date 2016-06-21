@@ -52,11 +52,11 @@ pub fn begin(handler: Box<Handler>, cfg: Config) {
     let event_handler = EventHandler(Box::into_raw(handler));
 
     // Create our new connections slab
-    let new_connection_slab = Arc::new(Mutex::new(Slab::<Connection>::new(10)));
+    let new_connection_slab = Arc::new(Mutex::new(Slab::<Connection>::with_capacity(10)));
 
     // Create our connection slab
     let mut_slab = MutSlab {
-        inner: UnsafeCell::new(Slab::<Arc<Connection>>::new(cfg.pre_allocated))
+        inner: UnsafeCell::new(Slab::<Arc<Connection>>::with_capacity(cfg.pre_allocated))
     };
     let connection_slab = Arc::new(mut_slab);
 
@@ -224,14 +224,9 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
 
     let mut x: isize = 0;
     while x < slab_len {
-        let connection_opt = (*slab_ptr)[x as usize].as_ref();
+        let arc_connection = (*slab_ptr)[x as usize].clone();
         x += 1;
 
-        if connection_opt.is_none() {
-            continue;
-        }
-
-        let arc_connection = connection_opt.unwrap();
         let mut err_state: Option<Error> = None;
         { // Mutex lock
             let mut guard = match arc_connection.err_mutex.lock() {
@@ -249,7 +244,7 @@ unsafe fn remove_stale_connections(connection_slab: &ConnectionSlab,
         match err_state {
             Some(err) => {
                 trace!("Found stale connection");
-                let arc_connection = (*slab_ptr).remove((x - 1) as usize).unwrap();
+                let arc_connection = (*slab_ptr).remove((x - 1) as usize);
 
                 // Inform kernel we're done
                 close_connection(&arc_connection);
@@ -293,7 +288,7 @@ unsafe fn insert_new_connections(new_connections: &NewConnectionSlab,
     let num_connections = (&mut *new_slab).len();
     let arc_main_slab = (*connection_slab).inner.get();
     for _ in 0..num_connections {
-        let connection = (&mut *new_slab).remove(0).unwrap();
+        let connection = (&mut *new_slab).remove(0);
         let arc_connection = Arc::new(connection);
         (*arc_main_slab).insert(arc_connection.clone());
         add_connection_to_epoll(&arc_connection);
