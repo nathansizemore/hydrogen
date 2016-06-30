@@ -16,5 +16,6 @@ name = "hydrogen"
 [dependencies]
 log = "^0.3"
 libc = "^0.2"
+epoll = "^0.4"
 threadpool = "~1.0"
 simple-slab = "^0.2"

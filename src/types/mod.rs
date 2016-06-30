@@ -14,8 +14,7 @@ use ::Stream;
 
 
 pub use self::connection::Connection;
+pub use self::handler::Handler;
 
 mod connection;
-
-
-pub type NewConnectionQueue<T: Stream> = Arc<Mutex<Vec<Connection<T>>>>;
+mod handler;

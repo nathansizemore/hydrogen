@@ -11,6 +11,7 @@
 #[macro_use]
 extern crate log;
 extern crate libc;
+extern crate epoll;
 extern crate threadpool;
 extern crate simple_slab;
 
@@ -20,13 +21,16 @@ use std::io::{self, Error};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 
+use types::Handler;
+
 pub use types::Connection;
+
 
 mod types;
 mod eventloop;
 
 
-pub trait Stream: AsRawFd {
+pub trait Stream: AsRawFd + Send + Sync {
     fn recv(&mut self) -> io::Result<Vec<Vec<u8>>>;
     fn send(&mut self, buf: &[u8]) -> io::Result<()>;
     fn shutdown(&mut self);
@@ -34,6 +38,7 @@ pub trait Stream: AsRawFd {
 
 pub trait EventHandler<T: Stream> {
     fn on_server_created(&mut self, listener: &TcpListener);
-    fn on_new_connection(&mut self, stream: TcpStream) -> Arc<Connection<T>>;
+    fn on_new_connection(&mut self, mut stream: TcpStream) -> Arc<Connection<T>>;
     fn on_data_received(&mut self, data: Vec<u8>, conn: Arc<Connection<T>>);
+    fn on_connection_removed(&mut self, conn: Arc<Connection<T>>, err: io::Error);
 }
