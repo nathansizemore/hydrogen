@@ -1,10 +1,28 @@
 // Copyright 2015 Nathan Sizemore <nathanrsizemore@gmail.com>
 //
-// This Source Code Form is subject to the terms of the
-// Mozilla Public License, v. 2.0. If a copy of the MPL was not
-// distributed with this file, You can obtain one at
-// http://mozilla.org/MPL/2.0/.
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file,
+// You can obtain one at http://mozilla.org/MPL/2.0/.
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+mod old {
 
 use std::{mem, thread};
 use std::error::Error as StdError;
@@ -22,7 +40,7 @@ use simple_slab::Slab;
 
 use types::*;
 use config::Config;
-use super::{Stream, Handler};
+use super::super::{Stream, Handler};
 
 
 // When added to epoll, these will be the conditions of kernel notification:
@@ -573,4 +591,5 @@ unsafe fn handle_read_event(arc_connection: Arc<Connection>, handler: EventHandl
     };
 
     return -1i32;
+}
 }

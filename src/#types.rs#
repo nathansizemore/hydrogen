@@ -1,10 +1,32 @@
 // Copyright 2015 Nathan Sizemore <nathanrsizemore@gmail.com>
 //
-// This Source Code Form is subject to the terms of the
-// Mozilla Public License, v. 2.0. If a copy of the MPL was not
-// distributed with this file, You can obtain one at
-// http://mozilla.org/MPL/2.0/.
+// This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+// If a copy of the MPL was not distributed with this file,
+// You can obtain one at http://mozilla.org/MPL/2.0/.
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+mod old {
 
 use std::io::{Error, ErrorKind};
 use std::cell::UnsafeCell;
@@ -14,7 +36,7 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use libc;
 use simple_slab::Slab;
 
-use super::{Stream, Handler};
+use super::super::{Stream, Handler};
 
 
 /// Memory region for all concurrent connections.
@@ -161,4 +183,5 @@ impl AsRawFd for HydrogenSocket {
     fn as_raw_fd(&self) -> RawFd {
         self.arc_connection.fd
     }
+}
 }
