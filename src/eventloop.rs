@@ -24,7 +24,7 @@ use ::Stream;
 
 
 type InterestList = Arc<Mutex<Vec<Interest>>>;
-type ConnectionSlab<T: Stream> = Arc<Mutex<Slab<Connection<T>>>>;
+type ConnectionSlab<T: Stream> = Arc<Mutex<Slab<Arc<Connection<T>>>>>;
 type NewConnectionQueue<T: Stream> = Arc<Mutex<Vec<Arc<Connection<T>>>>>;
 
 
@@ -89,14 +89,28 @@ fn listen<A, S>(addr: A,
 }
 
 fn event_loop<S: Stream>(new_conns: NewConnectionQueue<S>, handler: Handler<S>) {
-    // Create our Epoll Instance
-    let epoll_instance = EpollInstance::new().unwrap();
-    unsafe { epoll = Box::into_raw(Box::new(epoll_instance)); }
-
     // Create our action queues
     let register_list = Arc::new(Mutex::new(Vec::<Interest>::new()));
     let modify_list = Arc::new(Mutex::new(Vec::<Interest>::new()));
     let remove_list = Arc::new(Mutex::new(Vec::<Interest>::new()));
+
+    // Create our I/O batch areas
+    let rx_queue = Arc::new(Mutex::new(Vec::<Interest>::new()));
+    let tx_queue = Arc::new(Mutex::new(Vec::<Interest>::new()));
+
+    // Spawn our I/O Sentinel
+    let rx = rx_queue.clone();
+    let tx = tx_queue.clone();
+    let md_list = modify_list.clone();
+    let rm_list = remove_list.clone();
+    // thread::spawn(move || io_sentinel());
+
+
+    // Create our Epoll Instance
+    let epoll_instance = EpollInstance::new().unwrap();
+    unsafe { epoll = Box::into_raw(Box::new(epoll_instance)); }
+
+
 
     loop {
         // Remove stale interests
@@ -127,9 +141,10 @@ fn event_loop<S: Stream>(new_conns: NewConnectionQueue<S>, handler: Handler<S>) 
     unsafe { ptr::drop_in_place(epoll); }
 }
 
-fn event_pipeline(mut interests: Vec<Interest>,
-                  modify_list: &InterestList,
-                  remove_list: &InterestList)
+fn event_batcher<S: Stream>(mut interests: Vec<Interest>,
+                            handler: &Handler<S>,
+                            modify_list: &InterestList,
+                            remove_list: &InterestList)
 {
     for mut interest in interests.drain(..) {
         let event_flags = interest.events();
@@ -148,6 +163,26 @@ fn event_pipeline(mut interests: Vec<Interest>,
 
         if event_flags.contains(EPOLLOUT) {
 
+        }
+    }
+}
+
+fn io_sentinel<S: Stream>(connections: ConnectionSlab<S>,
+                          handler: Handler<S>,
+                          rx_queue: InterestList,
+                          tx_queue: InterestList,
+                          modify_list: InterestList,
+                          remove_list: InterestList)
+{
+    loop {
+        let mut queue = Vec::<Interest>::new();
+        lock_n_swap_mem(&*rx_queue, &mut queue);
+        for interest in queue.drain(..) {
+            let maybe_connection = get_connection_from_interest(&interest, &connections);
+            if maybe_connection.is_none() {
+                add_interest_to_list(interest, &remove_list);
+                continue;
+            }
         }
     }
 }
@@ -197,6 +232,20 @@ fn wait(timeout: i32, max_returned: usize) -> io::Result<Vec<Interest>> {
 fn add_interest_to_list(interest: Interest, list: &InterestList) {
     let mut l = list.lock().unwrap();
     l.push(interest);
+}
+
+fn get_connection_from_interest<S: Stream>(interest: &Interest,
+                                           connections: &ConnectionSlab<S>)
+                                           -> Option<Arc<Connection<S>>>
+{
+    let list = connections.lock().unwrap();
+    for connection in list.iter() {
+        if connection.as_raw_fd() == interest.as_raw_fd() {
+            return Some(connection.clone());
+        }
+    }
+
+    None
 }
 
 fn lock_n_swap_mem<T: Any>(mutex: &Mutex<T>, new: &mut T) {
