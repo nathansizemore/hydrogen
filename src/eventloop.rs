@@ -167,21 +167,44 @@ fn event_batcher<S: Stream>(mut interests: Vec<Interest>,
     }
 }
 
-fn io_sentinel<S: Stream>(connections: ConnectionSlab<S>,
-                          handler: Handler<S>,
-                          rx_queue: InterestList,
-                          tx_queue: InterestList,
-                          modify_list: InterestList,
-                          remove_list: InterestList)
+fn io_sentinel<S: Stream + 'static>(connections: ConnectionSlab<S>,
+                                    handler: Handler<S>,
+                                    rx_queue: InterestList,
+                                    tx_queue: InterestList,
+                                    modify_list: InterestList,
+                                    remove_list: InterestList)
 {
     loop {
         let mut queue = Vec::<Interest>::new();
         lock_n_swap_mem(&*rx_queue, &mut queue);
-        for interest in queue.drain(..) {
+        for mut interest in queue.drain(..) {
             let maybe_connection = get_connection_from_interest(&interest, &connections);
             if maybe_connection.is_none() {
                 add_interest_to_list(interest, &remove_list);
                 continue;
+            }
+
+            let h = handler.clone();
+            let rm_l = remove_list.clone();
+            let md_l = modify_list.clone();
+            let connection = maybe_connection.unwrap();
+            unsafe {
+                (*io_pool).execute(move || {
+                    let recv_result = connection.recv();
+                    if recv_result.is_err() {
+                        add_interest_to_list(interest, &rm_l);
+                        return;
+                    }
+
+                    let mut bufs = recv_result.unwrap();
+                    for buf in bufs.drain(..) {
+                        (*h.inner).on_data_received(buf, connection.clone());
+                    }
+
+                    let rearm_flags = EPOLLET | EPOLLIN | EPOLLRDHUP | EPOLLONESHOT;
+                    (*interest.events_mut()) | rearm_flags;
+                    add_interest_to_list(interest, &md_l);
+                });
             }
         }
     }
