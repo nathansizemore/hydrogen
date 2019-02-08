@@ -1,6 +1,6 @@
 [package]
 name = "hydrogen"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Nathan Sizemore <nathanrsizemore@gmail.com>"]
 description = "Multithreaded Linux TCP socket server using epoll."
 keywords = ["epoll", "non-blocking", "socket-server"]
@@ -17,5 +17,5 @@ name = "hydrogen"
 log = "^0.3"
 libc = "^0.2"
 errno = "^0.1.6"
-threadpool = "~1.0"
+threadpool = "1"
 simple-slab = "^0.2"
