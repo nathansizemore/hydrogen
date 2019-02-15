@@ -22,7 +22,7 @@ use simple_slab::Slab;
 
 use types::*;
 use config::Config;
-use super::{Stream, Handler};
+use super::Handler;
 
 
 // When added to epoll, these will be the conditions of kernel notification:
@@ -42,6 +42,7 @@ const DEFAULT_EVENTS: i32 = libc::EPOLLIN |
 const MAX_EVENTS: i32 = 100;
 
 // Useful to keep from passing a copy of a RawFd everywhere
+#[allow(non_upper_case_globals)]
 static mut epfd: RawFd = 0 as RawFd;
 
 
